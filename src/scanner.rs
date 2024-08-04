@@ -33,6 +33,12 @@ impl Scanner {
                 ')' => Some(self.create_token(TokenType::RightParen)),
                 '{' => Some(self.create_token(TokenType::LeftBrace)),
                 '}' => Some(self.create_token(TokenType::RightBrace)),
+                ',' => Some(self.create_token(TokenType::Comma)),
+                '.' => Some(self.create_token(TokenType::Dot)),
+                '-' => Some(self.create_token(TokenType::Minus)),
+                '+' => Some(self.create_token(TokenType::Plus)),
+                ';' => Some(self.create_token(TokenType::Semicolon)),
+                '*' => Some(self.create_token(TokenType::Star)),
 
                 _ => {
                     println!("Unexpected character on line {}: {c}", self.line);
