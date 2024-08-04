@@ -4,8 +4,8 @@ pub enum TokenType {
     // Single-character tokens
     LeftParen,
     RightParen,
-    // LeftBrace,
-    // RightBrace,
+    LeftBrace,
+    RightBrace,
     // Comma,
     // Dot,
     // Minus,
@@ -56,8 +56,8 @@ impl Display for TokenType {
         let s = match self {
             Self::LeftParen => "LEFT_PAREN",
             Self::RightParen => "RIGHT_PAREN",
-            // Self::LeftBrace => "LEFT_BRACE",
-            // Self::RightBrace => "RIGHT_BRACE",
+            Self::LeftBrace => "LEFT_BRACE",
+            Self::RightBrace => "RIGHT_BRACE",
             // Self::Comma => "COMMA",
             // Self::Dot => "DOT",
             // Self::Minus => "MINUS",
