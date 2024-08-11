@@ -27,7 +27,7 @@ pub enum TokenType {
     // Literals
     // Identifier,
     String(String),
-    // Number,
+    Number(f64),
 
     // Keywords
     // And,
@@ -75,7 +75,7 @@ impl Display for TokenType {
             Self::LessEqual => "LESS_EQUAL",
             // Self::Identifier => "IDENTIFIER",
             Self::String(_) => "STRING",
-            // Self::Number => "NUMBER",
+            Self::Number(_) => "NUMBER",
             // Self::And => "AND",
             // Self::Class => "CLASS",
             // Self::Else => "ELSE",
@@ -107,13 +107,13 @@ pub struct Token {
 
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let literal = match &self.ttype {
-            // TokenType::Identifier => ,
-            TokenType::String(s) => s,
-            // TokenType::Number => ,
-            _ => "null",
-        };
+        write!(f, "{} {} ", self.ttype, self.lexeme)?;
 
-        write!(f, "{} {} {}", self.ttype, self.lexeme, literal)
+        match &self.ttype {
+            // TokenType::Identifier => ,
+            TokenType::String(s) => write!(f, "{}", s),
+            TokenType::Number(n) => write!(f, "{:?}", n), // Dbg formatter needed to get trailing '.0' that is needed for some reason
+            _ => write!(f, "null"),
+        }
     }
 }

@@ -94,6 +94,25 @@ impl Scanner {
                     }
                 }
 
+                x if x.is_ascii_digit() => {
+                    while self.advance_if(|c| c.is_ascii_digit() ) {}
+
+                    if self.peek_nth(0) == Some('.') {
+                        if let Some(c1) = self.peek_nth(1) {
+                            if c1.is_ascii_digit() {
+                                // Only consume dot and following digits when we're sure
+                                self.advance();
+                                self.advance();
+                                while self.advance_if(|c| c.is_ascii_digit() ) {}
+                            }
+                        }
+                    }
+
+                    let s: String = self.source[self.start..self.current].iter().collect();
+                    let n = s.parse().unwrap();
+                    Some(self.create_token(TokenType::Number(n)))
+                }
+
                 _ => {
                     self.error_with_source("Unexpected character");
                     None
@@ -114,16 +133,13 @@ impl Scanner {
         tokens
     }
 
-    fn at_end(&self) -> bool {
-        self.current >= self.source.len()
+    fn peek(&self) -> Option<char> {
+        self.peek_nth(0)
     }
 
-    fn peek(&self) -> Option<char> {
-        if self.at_end() {
-            None
-        } else {
-            self.source.get(self.current).copied()
-        }
+    fn peek_nth(&self, nth: usize) -> Option<char> {
+        let idx = self.current + nth;
+        self.source.get(idx).copied()
     }
 
     fn advance(&mut self) -> Option<char> {
