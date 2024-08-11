@@ -57,6 +57,20 @@ impl Scanner {
                         Some(self.create_token(TokenType::Equal))
                     }
                 }
+                '>' => {
+                    if self.advance_if_matches('=') {
+                        Some(self.create_token(TokenType::GreaterEqual))
+                    } else {
+                        Some(self.create_token(TokenType::Greater))
+                    }
+                }
+                '<' => {
+                    if self.advance_if_matches('=') {
+                        Some(self.create_token(TokenType::LessEqual))
+                    } else {
+                        Some(self.create_token(TokenType::Less))
+                    }
+                }
 
                 _ => {
                     self.error("Unexpected character");
