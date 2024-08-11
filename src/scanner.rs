@@ -6,6 +6,8 @@ pub struct Scanner {
     start: usize,
     current: usize,
     line: usize,
+
+    had_error: bool,
 }
 
 impl Scanner {
@@ -14,7 +16,8 @@ impl Scanner {
             source: source.chars().collect(),
             start: 0,
             current: 0,
-            line: 0,
+            line: 1,
+            had_error: false,
         }
     }
 
@@ -41,7 +44,7 @@ impl Scanner {
                 '*' => Some(self.create_token(TokenType::Star)),
 
                 _ => {
-                    println!("Unexpected character on line {}: {c}", self.line);
+                    self.error("Unexpected character");
                     None
                 }
             };
@@ -80,5 +83,15 @@ impl Scanner {
             lexeme: self.source[self.start..self.current].iter().collect(),
             //line: self.line,
         }
+    }
+
+    fn error(&mut self, msg: &str) {
+        let source: String = self.source[self.start..self.current].iter().collect();
+        eprintln!("[line {}] Error: {}: {}", self.line, msg, source);
+        self.had_error = true;
+    }
+
+    pub fn had_error(&self) -> bool {
+        self.had_error
     }
 }

@@ -1,13 +1,13 @@
-use std::{env, fs};
+use std::{env, fs, process::ExitCode};
 
 mod scanner;
 mod token;
 
-fn main() {
+fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!("Usage: {} tokenize <filename>", args[0]);
-        return;
+        return ExitCode::from(128);
     }
 
     let command = &args[1];
@@ -25,9 +25,15 @@ fn main() {
             for token in tokens {
                 println!("{} {} null", token.ttype, token.lexeme);
             }
+
+            if scanner.had_error() {
+                return ExitCode::from(65);
+            }
         }
         _ => {
             eprintln!("Unknown command: {}", command);
         }
     }
+
+    ExitCode::from(0)
 }
