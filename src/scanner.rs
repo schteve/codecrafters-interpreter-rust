@@ -43,6 +43,14 @@ impl Scanner {
                 ';' => Some(self.create_token(TokenType::Semicolon)),
                 '*' => Some(self.create_token(TokenType::Star)),
 
+                '=' => {
+                    if self.advance_if_matches('=') {
+                        Some(self.create_token(TokenType::EqualEqual))
+                    } else {
+                        Some(self.create_token(TokenType::Equal))
+                    }
+                }
+
                 _ => {
                     self.error("Unexpected character");
                     None
@@ -67,14 +75,28 @@ impl Scanner {
         self.current >= self.source.len()
     }
 
-    fn advance(&mut self) -> Option<char> {
+    fn peek(&self) -> Option<char> {
         if self.at_end() {
             None
         } else {
-            let c = self.source.get(self.current).copied();
-            self.current += 1;
-            c
+            self.source.get(self.current).copied()
         }
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        let c = self.peek();
+        if c.is_some() {
+            self.current += 1;
+        }
+        c
+    }
+
+    fn advance_if_matches(&mut self, c: char) -> bool {
+        let m = self.peek() == Some(c);
+        if m {
+            self.current += 1
+        }
+        m
     }
 
     fn create_token(&self, ttype: TokenType) -> Token {
