@@ -80,8 +80,22 @@ impl Scanner {
                     }
                 }
 
+                '"' => {
+                    while self.advance_if(|c| c != '"') {}
+
+                    if self.advance_if(|c| c == '"') {
+                        let s: String = self.source[self.start + 1..self.current - 1]
+                            .iter()
+                            .collect();
+                        Some(self.create_token(TokenType::String(s)))
+                    } else {
+                        self.error("Unterminated string.");
+                        None
+                    }
+                }
+
                 _ => {
-                    self.error("Unexpected character");
+                    self.error_with_source("Unexpected character");
                     None
                 }
             };
@@ -140,6 +154,11 @@ impl Scanner {
     }
 
     fn error(&mut self, msg: &str) {
+        eprintln!("[line {}] Error: {}", self.line, msg);
+        self.had_error = true;
+    }
+
+    fn error_with_source(&mut self, msg: &str) {
         let source: String = self.source[self.start..self.current].iter().collect();
         eprintln!("[line {}] Error: {}: {}", self.line, msg, source);
         self.had_error = true;

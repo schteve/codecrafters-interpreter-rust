@@ -23,7 +23,7 @@ fn main() -> ExitCode {
             let mut scanner = scanner::Scanner::new(&file_contents);
             let tokens = scanner.scan_tokens();
             for token in tokens {
-                println!("{} {} null", token.ttype, token.lexeme);
+                println!("{}", token);
             }
 
             if scanner.had_error() {

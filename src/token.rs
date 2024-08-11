@@ -26,7 +26,7 @@ pub enum TokenType {
 
     // Literals
     // Identifier,
-    // String,
+    String(String),
     // Number,
 
     // Keywords
@@ -74,7 +74,7 @@ impl Display for TokenType {
             Self::Less => "LESS",
             Self::LessEqual => "LESS_EQUAL",
             // Self::Identifier => "IDENTIFIER",
-            // Self::String => "STRING",
+            Self::String(_) => "STRING",
             // Self::Number => "NUMBER",
             // Self::And => "AND",
             // Self::Class => "CLASS",
@@ -103,4 +103,17 @@ pub struct Token {
     pub ttype: TokenType,
     pub lexeme: String,
     //pub line: usize,
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let literal = match &self.ttype {
+            // TokenType::Identifier => ,
+            TokenType::String(s) => s,
+            // TokenType::Number => ,
+            _ => "null",
+        };
+
+        write!(f, "{} {} {}", self.ttype, self.lexeme, literal)
+    }
 }
