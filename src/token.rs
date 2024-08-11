@@ -11,7 +11,7 @@ pub enum TokenType {
     Minus,
     Plus,
     Semicolon,
-    // Slash,
+    Slash,
     Star,
 
     // One or two character tokens
@@ -63,7 +63,7 @@ impl Display for TokenType {
             Self::Minus => "MINUS",
             Self::Plus => "PLUS",
             Self::Semicolon => "SEMICOLON",
-            // Self::Slash => "SLASH",
+            Self::Slash => "SLASH",
             Self::Star => "STAR",
             Self::Bang => "BANG",
             Self::BangEqual => "BANG_EQUAL",

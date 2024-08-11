@@ -41,6 +41,18 @@ impl Scanner {
                 '-' => Some(self.create_token(TokenType::Minus)),
                 '+' => Some(self.create_token(TokenType::Plus)),
                 ';' => Some(self.create_token(TokenType::Semicolon)),
+                '/' => {
+                    if self.advance_if_matches('/') {
+                        while let Some(cn) = self.advance() {
+                            if cn == '\n' {
+                                break;
+                            }
+                        }
+                        None
+                    } else {
+                        Some(self.create_token(TokenType::Slash))
+                    }
+                }
                 '*' => Some(self.create_token(TokenType::Star)),
 
                 '!' => {
