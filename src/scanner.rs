@@ -108,9 +108,34 @@ impl Scanner {
                         }
                     }
 
-                    let s: String = self.source[self.start..self.current].iter().collect();
-                    let n = s.parse().unwrap();
+                    let n = self.current_lexeme().parse().unwrap();
                     Some(self.create_token(TokenType::Number(n)))
+                }
+
+                x if x.is_ascii_alphabetic() || x == '_' => {
+                    while self.advance_if(|c| c.is_ascii_alphanumeric() || c == '_') {}
+
+                    let ttype = match self.current_lexeme().as_str() {
+                        "and" => TokenType::And,
+                        "class" => TokenType::Class,
+                        "else" => TokenType::Else,
+                        "false" => TokenType::False,
+                        "fun" => TokenType::Fun,
+                        "for" => TokenType::For,
+                        "if" => TokenType::If,
+                        "nil" => TokenType::Nil,
+                        "or" => TokenType::Or,
+                        "print" => TokenType::Print,
+                        "return" => TokenType::Return,
+                        "super" => TokenType::Super,
+                        "this" => TokenType::This,
+                        "true" => TokenType::True,
+                        "var" => TokenType::Var,
+                        "while" => TokenType::While,
+                        _ => TokenType::Identifier,
+                    };
+
+                    Some(self.create_token(ttype))
                 }
 
                 _ => {
@@ -161,10 +186,14 @@ impl Scanner {
         b
     }
 
+    fn current_lexeme(&self) -> String {
+        self.source[self.start..self.current].iter().collect()
+    }
+
     fn create_token(&self, ttype: TokenType) -> Token {
         Token {
             ttype,
-            lexeme: self.source[self.start..self.current].iter().collect(),
+            lexeme: self.current_lexeme(),
             //line: self.line,
         }
     }
@@ -175,8 +204,7 @@ impl Scanner {
     }
 
     fn error_with_source(&mut self, msg: &str) {
-        let source: String = self.source[self.start..self.current].iter().collect();
-        eprintln!("[line {}] Error: {}: {}", self.line, msg, source);
+        eprintln!("[line {}] Error: {}: {}", self.line, msg, self.current_lexeme());
         self.had_error = true;
     }
 
