@@ -42,12 +42,8 @@ impl Scanner {
                 '+' => Some(self.create_token(TokenType::Plus)),
                 ';' => Some(self.create_token(TokenType::Semicolon)),
                 '/' => {
-                    if self.advance_if_matches('/') {
-                        while let Some(cn) = self.advance() {
-                            if cn == '\n' {
-                                break;
-                            }
-                        }
+                    if self.advance_if(|c| c == '/') {
+                        while self.advance_if(|c| c != '\n') {}
                         None
                     } else {
                         Some(self.create_token(TokenType::Slash))
@@ -56,28 +52,28 @@ impl Scanner {
                 '*' => Some(self.create_token(TokenType::Star)),
 
                 '!' => {
-                    if self.advance_if_matches('=') {
+                    if self.advance_if(|c| c == '=') {
                         Some(self.create_token(TokenType::BangEqual))
                     } else {
                         Some(self.create_token(TokenType::Bang))
                     }
                 }
                 '=' => {
-                    if self.advance_if_matches('=') {
+                    if self.advance_if(|c| c == '=') {
                         Some(self.create_token(TokenType::EqualEqual))
                     } else {
                         Some(self.create_token(TokenType::Equal))
                     }
                 }
                 '>' => {
-                    if self.advance_if_matches('=') {
+                    if self.advance_if(|c| c == '=') {
                         Some(self.create_token(TokenType::GreaterEqual))
                     } else {
                         Some(self.create_token(TokenType::Greater))
                     }
                 }
                 '<' => {
-                    if self.advance_if_matches('=') {
+                    if self.advance_if(|c| c == '=') {
                         Some(self.create_token(TokenType::LessEqual))
                     } else {
                         Some(self.create_token(TokenType::Less))
@@ -124,12 +120,15 @@ impl Scanner {
         c
     }
 
-    fn advance_if_matches(&mut self, c: char) -> bool {
-        let m = self.peek() == Some(c);
-        if m {
-            self.current += 1
+    fn advance_if<F>(&mut self, f: F) -> bool
+    where
+        F: Fn(char) -> bool,
+    {
+        let b = self.peek().map(f).unwrap_or(false);
+        if b {
+            self.current += 1;
         }
-        m
+        b
     }
 
     fn create_token(&self, ttype: TokenType) -> Token {
