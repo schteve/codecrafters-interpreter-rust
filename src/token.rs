@@ -15,8 +15,8 @@ pub enum TokenType {
     Star,
 
     // One or two character tokens
-    // Bang,
-    // BangEqual,
+    Bang,
+    BangEqual,
     Equal,
     EqualEqual,
     // Greater,
@@ -65,8 +65,8 @@ impl Display for TokenType {
             Self::Semicolon => "SEMICOLON",
             // Self::Slash => "SLASH",
             Self::Star => "STAR",
-            // Self::Bang => "BANG",
-            // Self::BangEqual => "BANG_EQUAL",
+            Self::Bang => "BANG",
+            Self::BangEqual => "BANG_EQUAL",
             Self::Equal => "EQUAL",
             Self::EqualEqual => "EQUAL_EQUAL",
             // Self::Greater => "GREATER",

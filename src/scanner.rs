@@ -43,6 +43,13 @@ impl Scanner {
                 ';' => Some(self.create_token(TokenType::Semicolon)),
                 '*' => Some(self.create_token(TokenType::Star)),
 
+                '!' => {
+                    if self.advance_if_matches('=') {
+                        Some(self.create_token(TokenType::BangEqual))
+                    } else {
+                        Some(self.create_token(TokenType::Bang))
+                    }
+                }
                 '=' => {
                     if self.advance_if_matches('=') {
                         Some(self.create_token(TokenType::EqualEqual))
