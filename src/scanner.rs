@@ -95,7 +95,7 @@ impl Scanner {
                 }
 
                 x if x.is_ascii_digit() => {
-                    while self.advance_if(|c| c.is_ascii_digit() ) {}
+                    while self.advance_if(|c| c.is_ascii_digit()) {}
 
                     if self.peek_nth(0) == Some('.') {
                         if let Some(c1) = self.peek_nth(1) {
@@ -103,7 +103,7 @@ impl Scanner {
                                 // Only consume dot and following digits when we're sure
                                 self.advance();
                                 self.advance();
-                                while self.advance_if(|c| c.is_ascii_digit() ) {}
+                                while self.advance_if(|c| c.is_ascii_digit()) {}
                             }
                         }
                     }
@@ -204,7 +204,12 @@ impl Scanner {
     }
 
     fn error_with_source(&mut self, msg: &str) {
-        eprintln!("[line {}] Error: {}: {}", self.line, msg, self.current_lexeme());
+        eprintln!(
+            "[line {}] Error: {}: {}",
+            self.line,
+            msg,
+            self.current_lexeme()
+        );
         self.had_error = true;
     }
 
