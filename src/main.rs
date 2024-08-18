@@ -1,12 +1,13 @@
 use std::{env, fs, process::ExitCode};
 
+mod parser;
 mod scanner;
 mod token;
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("Usage: {} tokenize <filename>", args[0]);
+        eprintln!("Usage: {} [tokenize | parse] <filename>", args[0]);
         return ExitCode::from(128);
     }
 
@@ -28,6 +29,24 @@ fn main() -> ExitCode {
 
             if scanner.had_error() {
                 return ExitCode::from(65);
+            }
+        }
+        "parse" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                eprintln!("Failed to read file {}", filename);
+                String::new()
+            });
+
+            let mut scanner = scanner::Scanner::new(&file_contents);
+            let tokens = scanner.scan_tokens();
+            if scanner.had_error() {
+                return ExitCode::from(65);
+            }
+
+            let mut parser = parser::Parser::new(tokens);
+            match parser.parse_ast() {
+                Ok(ast) => ast.print(),
+                Err(e) => eprintln!("{e}"),
             }
         }
         _ => {
