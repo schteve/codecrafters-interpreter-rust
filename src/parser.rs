@@ -10,7 +10,7 @@ pub enum ParseError {
 }
 
 pub enum Literal {
-    // Number(f64),
+    Number(f64),
     // String(String),
     Bool(bool),
     Nil,
@@ -24,7 +24,7 @@ impl Expr {
     pub fn print(&self) {
         match self {
             Self::Literal(lit) => match lit {
-                // Literal::Number(n) => println!("{n}"),
+                Literal::Number(n) => println!("{n:?}"),
                 // Literal::String(s) => println!("{s}"),
                 Literal::Bool(b) => println!("{b}"),
                 Literal::Nil => println!("nil"),
@@ -40,10 +40,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            current: 0,
-        }
+        Self { tokens, current: 0 }
     }
 
     pub fn parse_ast(&mut self) -> Result<Expr, ParseError> {
@@ -51,15 +48,13 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Option<Expr> {
-        if self.advance_if_matches(TokenType::True) {
-            Some(Expr::Literal(Literal::Bool(true)))
-        } else if self.advance_if_matches(TokenType::False) {
-            Some(Expr::Literal(Literal::Bool(false)))
-        } else if self.advance_if_matches(TokenType::Nil) {
-            Some(Expr::Literal(Literal::Nil))
-        } else {
-            None
-        }
+        self.advance().and_then(|t| match t.ttype {
+            TokenType::Number(n) => Some(Expr::Literal(Literal::Number(n))),
+            TokenType::True => Some(Expr::Literal(Literal::Bool(true))),
+            TokenType::False => Some(Expr::Literal(Literal::Bool(false))),
+            TokenType::Nil => Some(Expr::Literal(Literal::Nil)),
+            _ => None,
+        })
     }
 
     fn peek(&self) -> Option<Token> {
@@ -71,18 +66,11 @@ impl Parser {
         self.tokens.get(idx).cloned()
     }
 
-    fn advance_if<F>(&mut self, f: F) -> bool
-    where
-        F: Fn(Token) -> bool,
-    {
-        let b = self.peek().map(f).unwrap_or(false);
-        if b {
+    fn advance(&mut self) -> Option<Token> {
+        let t = self.peek();
+        if t.is_some() {
             self.current += 1;
         }
-        b
-    }
-
-    fn advance_if_matches(&mut self, ttype: TokenType) -> bool {
-        self.advance_if(|t| ttype.matches(&t.ttype))
+        t
     }
 }
