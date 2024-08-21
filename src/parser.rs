@@ -11,7 +11,7 @@ pub enum ParseError {
 
 pub enum Literal {
     Number(f64),
-    // String(String),
+    String(String),
     Bool(bool),
     Nil,
 }
@@ -25,7 +25,7 @@ impl Expr {
         match self {
             Self::Literal(lit) => match lit {
                 Literal::Number(n) => println!("{n:?}"),
-                // Literal::String(s) => println!("{s}"),
+                Literal::String(s) => println!("{s}"),
                 Literal::Bool(b) => println!("{b}"),
                 Literal::Nil => println!("nil"),
             },
@@ -50,6 +50,7 @@ impl Parser {
     fn parse_primary(&mut self) -> Option<Expr> {
         self.advance().and_then(|t| match t.ttype {
             TokenType::Number(n) => Some(Expr::Literal(Literal::Number(n))),
+            TokenType::String(s) => Some(Expr::Literal(Literal::String(s))),
             TokenType::True => Some(Expr::Literal(Literal::Bool(true))),
             TokenType::False => Some(Expr::Literal(Literal::Bool(false))),
             TokenType::Nil => Some(Expr::Literal(Literal::Nil)),
