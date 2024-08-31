@@ -7,6 +7,8 @@ use crate::token::{Token, TokenType};
 pub enum ParseError {
     #[error("No valid expression")]
     NoValidExpr,
+    #[error("Expect ')' after expression.")]
+    ExpectRightParen,
 }
 
 pub enum Literal {
@@ -18,17 +20,23 @@ pub enum Literal {
 
 pub enum Expr {
     Literal(Literal),
+    Grouping(Box<Expr>),
 }
 
 impl Expr {
     pub fn print(&self) {
         match self {
             Self::Literal(lit) => match lit {
-                Literal::Number(n) => println!("{n:?}"),
-                Literal::String(s) => println!("{s}"),
-                Literal::Bool(b) => println!("{b}"),
-                Literal::Nil => println!("nil"),
+                Literal::Number(n) => print!("{n:?}"),
+                Literal::String(s) => print!("{s}"),
+                Literal::Bool(b) => print!("{b}"),
+                Literal::Nil => print!("nil"),
             },
+            Self::Grouping(grp) => {
+                print!("(group ");
+                grp.print();
+                print!(")");
+            }
         }
     }
 }
@@ -44,18 +52,54 @@ impl Parser {
     }
 
     pub fn parse_ast(&mut self) -> Result<Expr, ParseError> {
-        self.parse_primary().ok_or(ParseError::NoValidExpr)
+        self.parse_expr()
     }
 
-    fn parse_primary(&mut self) -> Option<Expr> {
-        self.advance().and_then(|t| match t.ttype {
-            TokenType::Number(n) => Some(Expr::Literal(Literal::Number(n))),
-            TokenType::String(s) => Some(Expr::Literal(Literal::String(s))),
-            TokenType::True => Some(Expr::Literal(Literal::Bool(true))),
-            TokenType::False => Some(Expr::Literal(Literal::Bool(false))),
-            TokenType::Nil => Some(Expr::Literal(Literal::Nil)),
-            _ => None,
-        })
+    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        self.parse_equality()
+    }
+
+    fn parse_equality(&mut self) -> Result<Expr, ParseError> {
+        self.parse_comparison()
+    }
+
+    fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
+        self.parse_term()
+    }
+
+    fn parse_term(&mut self) -> Result<Expr, ParseError> {
+        self.parse_factor()
+    }
+
+    fn parse_factor(&mut self) -> Result<Expr, ParseError> {
+        self.parse_unary()
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, ParseError> {
+        self.parse_primary()
+    }
+
+    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
+        self.advance()
+            .ok_or(ParseError::NoValidExpr)
+            .and_then(|t| match t.ttype {
+                TokenType::Number(n) => Ok(Expr::Literal(Literal::Number(n))),
+                TokenType::String(s) => Ok(Expr::Literal(Literal::String(s))),
+                TokenType::True => Ok(Expr::Literal(Literal::Bool(true))),
+                TokenType::False => Ok(Expr::Literal(Literal::Bool(false))),
+                TokenType::Nil => Ok(Expr::Literal(Literal::Nil)),
+                TokenType::LeftParen => {
+                    let expr = self.parse_expr()?;
+                    match self.advance() {
+                        Some(Token {
+                            ttype: TokenType::RightParen,
+                            ..
+                        }) => Ok(Expr::Grouping(Box::new(expr))),
+                        _ => Err(ParseError::ExpectRightParen),
+                    }
+                }
+                _ => Err(ParseError::NoValidExpr),
+            })
     }
 
     fn peek(&self) -> Option<Token> {

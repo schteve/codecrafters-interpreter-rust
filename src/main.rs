@@ -45,7 +45,10 @@ fn main() -> ExitCode {
 
             let mut parser = parser::Parser::new(tokens);
             match parser.parse_ast() {
-                Ok(ast) => ast.print(),
+                Ok(ast) => {
+                    ast.print();
+                    println!();
+                }
                 Err(e) => eprintln!("{e}"),
             }
         }
