@@ -23,10 +23,16 @@ pub enum Unary {
     Not(Box<Expr>),
 }
 
+pub enum Binary {
+    Mul(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+}
+
 pub enum Expr {
     Literal(Literal),
     Grouping(Box<Expr>),
     Unary(Unary),
+    Binary(Binary),
 }
 
 impl Expr {
@@ -52,6 +58,22 @@ impl Expr {
                 Unary::Not(expr) => {
                     print!("(! ");
                     expr.print();
+                    print!(")");
+                }
+            },
+            Self::Binary(bin) => match bin {
+                Binary::Mul(left, right) => {
+                    print!("(* ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
+                Binary::Div(left, right) => {
+                    print!("(/ ");
+                    left.print();
+                    print!(" ");
+                    right.print();
                     print!(")");
                 }
             },
@@ -90,7 +112,23 @@ impl Parser {
     }
 
     fn parse_factor(&mut self) -> Result<Expr, ParseError> {
-        self.parse_unary()
+        let mut expr = self.parse_unary()?;
+
+        while let Some(Token {
+            ttype: TokenType::Star | TokenType::Slash,
+            ..
+        }) = self.peek()
+        {
+            let operator = self.advance().unwrap();
+            let right = self.parse_unary().or(Err(ParseError::NoValidExpr))?;
+            expr = match operator.ttype {
+                TokenType::Star => Expr::Binary(Binary::Mul(Box::new(expr), Box::new(right))),
+                TokenType::Slash => Expr::Binary(Binary::Div(Box::new(expr), Box::new(right))),
+                _ => unreachable!("Invalid type"),
+            }
+        }
+
+        Ok(expr)
     }
 
     fn parse_unary(&mut self) -> Result<Expr, ParseError> {
