@@ -32,6 +32,8 @@ pub enum Binary {
     LessEqual(Box<Expr>, Box<Expr>),
     Greater(Box<Expr>, Box<Expr>),
     GreaterEqual(Box<Expr>, Box<Expr>),
+    Equal(Box<Expr>, Box<Expr>),
+    NotEqual(Box<Expr>, Box<Expr>),
 }
 
 pub enum Expr {
@@ -124,6 +126,20 @@ impl Expr {
                     right.print();
                     print!(")");
                 }
+                Binary::Equal(left, right) => {
+                    print!("(== ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
+                Binary::NotEqual(left, right) => {
+                    print!("(!= ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
             },
         }
     }
@@ -148,7 +164,27 @@ impl Parser {
     }
 
     fn parse_equality(&mut self) -> Result<Expr, ParseError> {
-        self.parse_comparison()
+        let mut expr = self.parse_comparison()?;
+
+        while let Some(Token {
+            ttype: TokenType::EqualEqual | TokenType::BangEqual,
+            ..
+        }) = self.peek()
+        {
+            let operator = self.advance().unwrap();
+            let right = self.parse_comparison().or(Err(ParseError::NoValidExpr))?;
+            expr = match operator.ttype {
+                TokenType::EqualEqual => {
+                    Expr::Binary(Binary::Equal(Box::new(expr), Box::new(right)))
+                }
+                TokenType::BangEqual => {
+                    Expr::Binary(Binary::NotEqual(Box::new(expr), Box::new(right)))
+                }
+                _ => unreachable!("Invalid type"),
+            }
+        }
+
+        Ok(expr)
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
