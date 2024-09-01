@@ -4,11 +4,23 @@ use thiserror::Error;
 use crate::token::{Token, TokenType};
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub enum ParseError {
+pub enum ParseErrorKind {
     #[error("No valid expression")]
     NoValidExpr,
     #[error("Expect ')' after expression.")]
     ExpectRightParen,
+    #[error("Expect expression.")]
+    ExpectExpression,
+}
+
+#[derive(Clone, Debug, Error, PartialEq)]
+#[error("[line {}] Error at {}: {source}",
+    if let Some(t) = &self.token { t.line } else { 0 },
+    if let Some(t) = &self.token { format!("'{}'", &t.lexeme) } else { String::from("end") }
+)]
+pub struct ParseError {
+    token: Option<Token>,
+    source: ParseErrorKind,
 }
 
 pub enum Literal {
@@ -172,7 +184,9 @@ impl Parser {
         }) = self.peek()
         {
             let operator = self.advance().unwrap();
-            let right = self.parse_comparison().or(Err(ParseError::NoValidExpr))?;
+            let right = self
+                .parse_comparison()
+                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
             expr = match operator.ttype {
                 TokenType::EqualEqual => {
                     Expr::Binary(Binary::Equal(Box::new(expr), Box::new(right)))
@@ -197,7 +211,9 @@ impl Parser {
         }) = self.peek()
         {
             let operator = self.advance().unwrap();
-            let right = self.parse_term().or(Err(ParseError::NoValidExpr))?;
+            let right = self
+                .parse_term()
+                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
             expr = match operator.ttype {
                 TokenType::Less => Expr::Binary(Binary::Less(Box::new(expr), Box::new(right))),
                 TokenType::LessEqual => {
@@ -225,7 +241,9 @@ impl Parser {
         }) = self.peek()
         {
             let operator = self.advance().unwrap();
-            let right = self.parse_factor().or(Err(ParseError::NoValidExpr))?;
+            let right = self
+                .parse_factor()
+                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
             expr = match operator.ttype {
                 TokenType::Plus => Expr::Binary(Binary::Add(Box::new(expr), Box::new(right))),
                 TokenType::Minus => Expr::Binary(Binary::Sub(Box::new(expr), Box::new(right))),
@@ -245,7 +263,9 @@ impl Parser {
         }) = self.peek()
         {
             let operator = self.advance().unwrap();
-            let right = self.parse_unary().or(Err(ParseError::NoValidExpr))?;
+            let right = self
+                .parse_unary()
+                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
             expr = match operator.ttype {
                 TokenType::Star => Expr::Binary(Binary::Mul(Box::new(expr), Box::new(right))),
                 TokenType::Slash => Expr::Binary(Binary::Div(Box::new(expr), Box::new(right))),
@@ -258,7 +278,7 @@ impl Parser {
 
     fn parse_unary(&mut self) -> Result<Expr, ParseError> {
         self.peek()
-            .ok_or(ParseError::NoValidExpr)
+            .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
             .and_then(|t| match t.ttype {
                 TokenType::Minus => {
                     self.advance();
@@ -276,7 +296,7 @@ impl Parser {
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         self.peek()
-            .ok_or(ParseError::NoValidExpr)
+            .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
             .and_then(|t| match t.ttype {
                 TokenType::Number(n) => {
                     self.advance();
@@ -306,10 +326,10 @@ impl Parser {
                             ttype: TokenType::RightParen,
                             ..
                         }) => Ok(Expr::Grouping(Box::new(expr))),
-                        _ => Err(ParseError::ExpectRightParen),
+                        _ => Err(self.error(ParseErrorKind::ExpectRightParen)),
                     }
                 }
-                _ => Err(ParseError::NoValidExpr),
+                _ => Err(self.error(ParseErrorKind::NoValidExpr)),
             })
     }
 
@@ -328,5 +348,12 @@ impl Parser {
             self.current += 1;
         }
         t
+    }
+
+    fn error(&self, kind: ParseErrorKind) -> ParseError {
+        ParseError {
+            token: self.peek(),
+            source: kind,
+        }
     }
 }

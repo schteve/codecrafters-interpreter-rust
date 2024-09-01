@@ -49,7 +49,10 @@ fn main() -> ExitCode {
                     ast.print();
                     println!();
                 }
-                Err(e) => eprintln!("{e}"),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(65);
+                }
             }
         }
         _ => {

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
     // Single-character tokens
     LeftParen,
@@ -100,11 +100,11 @@ impl Display for TokenType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     pub ttype: TokenType,
     pub lexeme: String,
-    //pub line: usize,
+    pub line: usize,
 }
 
 impl Display for Token {

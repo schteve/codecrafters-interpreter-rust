@@ -194,7 +194,7 @@ impl Scanner {
         Token {
             ttype,
             lexeme: self.current_lexeme(),
-            //line: self.line,
+            line: self.line,
         }
     }
 
