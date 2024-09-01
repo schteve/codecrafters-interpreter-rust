@@ -1,5 +1,6 @@
 use std::{env, fs, process::ExitCode};
 
+mod evaluator;
 mod parser;
 mod scanner;
 mod token;
@@ -7,7 +8,10 @@ mod token;
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("Usage: {} [tokenize | parse] <filename>", args[0]);
+        eprintln!(
+            "Usage: {} [tokenize | parse | evaluate] <filename>",
+            args[0]
+        );
         return ExitCode::from(128);
     }
 
@@ -54,6 +58,34 @@ fn main() -> ExitCode {
                     return ExitCode::from(65);
                 }
             }
+        }
+        "evaluate" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                eprintln!("Failed to read file {}", filename);
+                String::new()
+            });
+
+            let mut scanner = scanner::Scanner::new(&file_contents);
+            let tokens = scanner.scan_tokens();
+            if scanner.had_error() {
+                return ExitCode::from(65);
+            }
+
+            let mut parser = parser::Parser::new(tokens);
+            let ast = parser.parse_ast();
+            if let Err(e) = ast {
+                eprintln!("{e}");
+                return ExitCode::from(65);
+            }
+            let ast = ast.unwrap();
+
+            let result = evaluator::eval(&ast);
+            if let Err(e) = result {
+                eprintln!("{e}");
+                return ExitCode::from(65);
+            }
+            let result = result.unwrap();
+            println!("{result}");
         }
         _ => {
             eprintln!("Unknown command: {}", command);
