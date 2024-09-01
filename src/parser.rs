@@ -28,6 +28,10 @@ pub enum Binary {
     Sub(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
+    Less(Box<Expr>, Box<Expr>),
+    LessEqual(Box<Expr>, Box<Expr>),
+    Greater(Box<Expr>, Box<Expr>),
+    GreaterEqual(Box<Expr>, Box<Expr>),
 }
 
 pub enum Expr {
@@ -92,6 +96,34 @@ impl Expr {
                     right.print();
                     print!(")");
                 }
+                Binary::Less(left, right) => {
+                    print!("(< ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
+                Binary::LessEqual(left, right) => {
+                    print!("(<= ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
+                Binary::Greater(left, right) => {
+                    print!("(> ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
+                Binary::GreaterEqual(left, right) => {
+                    print!("(>= ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
             },
         }
     }
@@ -120,7 +152,32 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
-        self.parse_term()
+        let mut expr = self.parse_term()?;
+
+        while let Some(Token {
+            ttype:
+                TokenType::Less | TokenType::LessEqual | TokenType::Greater | TokenType::GreaterEqual,
+            ..
+        }) = self.peek()
+        {
+            let operator = self.advance().unwrap();
+            let right = self.parse_term().or(Err(ParseError::NoValidExpr))?;
+            expr = match operator.ttype {
+                TokenType::Less => Expr::Binary(Binary::Less(Box::new(expr), Box::new(right))),
+                TokenType::LessEqual => {
+                    Expr::Binary(Binary::LessEqual(Box::new(expr), Box::new(right)))
+                }
+                TokenType::Greater => {
+                    Expr::Binary(Binary::Greater(Box::new(expr), Box::new(right)))
+                }
+                TokenType::GreaterEqual => {
+                    Expr::Binary(Binary::GreaterEqual(Box::new(expr), Box::new(right)))
+                }
+                _ => unreachable!("Invalid type"),
+            }
+        }
+
+        Ok(expr)
     }
 
     fn parse_term(&mut self) -> Result<Expr, ParseError> {
