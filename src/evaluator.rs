@@ -2,12 +2,35 @@ use std::fmt::Display;
 
 use thiserror::Error;
 
-use crate::parser::{Binary, Expr, Literal, Unary};
+use crate::{
+    parser::{Binary, Expr, ExprKind, Literal, Unary},
+    token::Token,
+};
 
 #[derive(Clone, Debug, Error, PartialEq)]
-pub enum RuntimeError {
-    #[error("{0} operation invalid, got {1}")]
-    InvalidOperation(String, String),
+pub enum RuntimeErrorKind {
+    #[error("Operand must be a number.")]
+    OperandNumber,
+    #[error("Operands must be numbers.")]
+    OperandNumbers,
+    #[error("Operands must be two numbers or two strings.")]
+    OperandNumbersOrStrings,
+}
+
+#[derive(Clone, Debug, Error, PartialEq)]
+#[error("{source}\n[line {}]", self.token.line)]
+pub struct RuntimeError {
+    token: Token,
+    source: RuntimeErrorKind,
+}
+
+impl RuntimeError {
+    fn new(token: Token, kind: RuntimeErrorKind) -> Self {
+        Self {
+            token,
+            source: kind,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -51,22 +74,22 @@ impl Display for Value {
 }
 
 pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
-    match expr {
-        Expr::Literal(lit) => match lit {
+    match &expr.kind {
+        ExprKind::Literal(lit) => match lit {
             Literal::Number(n) => Ok(Value::Number(*n)),
             Literal::String(s) => Ok(Value::String(s.clone())),
             Literal::Bool(b) => Ok(Value::Bool(*b)),
             Literal::Nil => Ok(Value::Nil),
         },
-        Expr::Grouping(expr) => eval(expr),
-        Expr::Unary(un) => match un {
+        ExprKind::Grouping(expr) => eval(expr),
+        ExprKind::Unary(un) => match un {
             Unary::Negate(expr) => {
                 let expr_value = eval(expr)?;
                 match expr_value {
                     Value::Number(n) => Ok(Value::Number(-n)),
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Negate".into(),
-                        format!("{:?}", expr_value),
+                    _ => Err(RuntimeError::new(
+                        expr.token.clone(),
+                        RuntimeErrorKind::OperandNumber,
                     )),
                 }
             }
@@ -76,7 +99,7 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                 Ok(Value::Bool(!truth))
             }
         },
-        Expr::Binary(bin) => match bin {
+        ExprKind::Binary(bin) => match bin {
             Binary::Add(left, right) => {
                 let left_value = eval(left)?;
                 let right_value = eval(right)?;
@@ -88,9 +111,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::String(left_s), Value::String(right_s)) => {
                         Ok(Value::String(format!("{}{}", left_s, right_s)))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Add".into(),
-                        format!("{:?} + {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbersOrStrings,
                     )),
                 }
             }
@@ -102,9 +125,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::Number(left_n), Value::Number(right_n)) => {
                         Ok(Value::Number(left_n - right_n))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Sub".into(),
-                        format!("{:?} - {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbers,
                     )),
                 }
             }
@@ -116,9 +139,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::Number(left_n), Value::Number(right_n)) => {
                         Ok(Value::Number(left_n * right_n))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Mul".into(),
-                        format!("{:?} * {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbers,
                     )),
                 }
             }
@@ -130,9 +153,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::Number(left_n), Value::Number(right_n)) => {
                         Ok(Value::Number(left_n / right_n))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Div".into(),
-                        format!("{:?} / {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbers,
                     )),
                 }
             }
@@ -144,9 +167,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::Number(left_n), Value::Number(right_n)) => {
                         Ok(Value::Bool(left_n < right_n))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Less".into(),
-                        format!("{:?} </> {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbers,
                     )),
                 }
             }
@@ -158,9 +181,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::Number(left_n), Value::Number(right_n)) => {
                         Ok(Value::Bool(left_n <= right_n))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "LessEqual".into(),
-                        format!("{:?} <=> {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbers,
                     )),
                 }
             }
@@ -172,9 +195,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::Number(left_n), Value::Number(right_n)) => {
                         Ok(Value::Bool(left_n > right_n))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Greater".into(),
-                        format!("{:?} > {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbers,
                     )),
                 }
             }
@@ -186,9 +209,9 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
                     (Value::Number(left_n), Value::Number(right_n)) => {
                         Ok(Value::Bool(left_n >= right_n))
                     }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "GreaterEqual".into(),
-                        format!("{:?} >= {:?}", left_value, right_value),
+                    _ => Err(RuntimeError::new(
+                        left.token.clone(),
+                        RuntimeErrorKind::OperandNumbers,
                     )),
                 }
             }

@@ -48,28 +48,37 @@ pub enum Binary {
     NotEqual(Box<Expr>, Box<Expr>),
 }
 
-pub enum Expr {
+pub enum ExprKind {
     Literal(Literal),
     Grouping(Box<Expr>),
     Unary(Unary),
     Binary(Binary),
 }
 
+pub struct Expr {
+    pub token: Token,
+    pub kind: ExprKind,
+}
+
 impl Expr {
+    fn new(token: Token, kind: ExprKind) -> Self {
+        Expr { token, kind }
+    }
+
     pub fn print(&self) {
-        match self {
-            Self::Literal(lit) => match lit {
+        match &self.kind {
+            ExprKind::Literal(lit) => match lit {
                 Literal::Number(n) => print!("{n:?}"),
                 Literal::String(s) => print!("{s}"),
                 Literal::Bool(b) => print!("{b}"),
                 Literal::Nil => print!("nil"),
             },
-            Self::Grouping(expr) => {
+            ExprKind::Grouping(expr) => {
                 print!("(group ");
                 expr.print();
                 print!(")");
             }
-            Self::Unary(un) => match un {
+            ExprKind::Unary(un) => match un {
                 Unary::Negate(expr) => {
                     print!("(- ");
                     expr.print();
@@ -81,7 +90,7 @@ impl Expr {
                     print!(")");
                 }
             },
-            Self::Binary(bin) => match bin {
+            ExprKind::Binary(bin) => match bin {
                 Binary::Add(left, right) => {
                     print!("(+ ");
                     left.print();
@@ -187,15 +196,16 @@ impl Parser {
             let right = self
                 .parse_comparison()
                 .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
-            expr = match operator.ttype {
+            let kind = match operator.ttype {
                 TokenType::EqualEqual => {
-                    Expr::Binary(Binary::Equal(Box::new(expr), Box::new(right)))
+                    ExprKind::Binary(Binary::Equal(Box::new(expr), Box::new(right)))
                 }
                 TokenType::BangEqual => {
-                    Expr::Binary(Binary::NotEqual(Box::new(expr), Box::new(right)))
+                    ExprKind::Binary(Binary::NotEqual(Box::new(expr), Box::new(right)))
                 }
                 _ => unreachable!("Invalid type"),
-            }
+            };
+            expr = Expr::new(operator, kind);
         }
 
         Ok(expr)
@@ -214,19 +224,20 @@ impl Parser {
             let right = self
                 .parse_term()
                 .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
-            expr = match operator.ttype {
-                TokenType::Less => Expr::Binary(Binary::Less(Box::new(expr), Box::new(right))),
+            let kind = match operator.ttype {
+                TokenType::Less => ExprKind::Binary(Binary::Less(Box::new(expr), Box::new(right))),
                 TokenType::LessEqual => {
-                    Expr::Binary(Binary::LessEqual(Box::new(expr), Box::new(right)))
+                    ExprKind::Binary(Binary::LessEqual(Box::new(expr), Box::new(right)))
                 }
                 TokenType::Greater => {
-                    Expr::Binary(Binary::Greater(Box::new(expr), Box::new(right)))
+                    ExprKind::Binary(Binary::Greater(Box::new(expr), Box::new(right)))
                 }
                 TokenType::GreaterEqual => {
-                    Expr::Binary(Binary::GreaterEqual(Box::new(expr), Box::new(right)))
+                    ExprKind::Binary(Binary::GreaterEqual(Box::new(expr), Box::new(right)))
                 }
                 _ => unreachable!("Invalid type"),
-            }
+            };
+            expr = Expr::new(operator, kind);
         }
 
         Ok(expr)
@@ -244,11 +255,12 @@ impl Parser {
             let right = self
                 .parse_factor()
                 .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
-            expr = match operator.ttype {
-                TokenType::Plus => Expr::Binary(Binary::Add(Box::new(expr), Box::new(right))),
-                TokenType::Minus => Expr::Binary(Binary::Sub(Box::new(expr), Box::new(right))),
+            let kind = match operator.ttype {
+                TokenType::Plus => ExprKind::Binary(Binary::Add(Box::new(expr), Box::new(right))),
+                TokenType::Minus => ExprKind::Binary(Binary::Sub(Box::new(expr), Box::new(right))),
                 _ => unreachable!("Invalid type"),
-            }
+            };
+            expr = Expr::new(operator, kind);
         }
 
         Ok(expr)
@@ -266,11 +278,12 @@ impl Parser {
             let right = self
                 .parse_unary()
                 .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
-            expr = match operator.ttype {
-                TokenType::Star => Expr::Binary(Binary::Mul(Box::new(expr), Box::new(right))),
-                TokenType::Slash => Expr::Binary(Binary::Div(Box::new(expr), Box::new(right))),
+            let kind = match operator.ttype {
+                TokenType::Star => ExprKind::Binary(Binary::Mul(Box::new(expr), Box::new(right))),
+                TokenType::Slash => ExprKind::Binary(Binary::Div(Box::new(expr), Box::new(right))),
                 _ => unreachable!("Invalid type"),
-            }
+            };
+            expr = Expr::new(operator, kind);
         }
 
         Ok(expr)
@@ -283,12 +296,14 @@ impl Parser {
                 TokenType::Minus => {
                     self.advance();
                     let expr = self.parse_unary()?;
-                    Ok(Expr::Unary(Unary::Negate(Box::new(expr))))
+                    let kind = ExprKind::Unary(Unary::Negate(Box::new(expr)));
+                    Ok(Expr::new(t, kind))
                 }
                 TokenType::Bang => {
                     self.advance();
                     let expr = self.parse_unary()?;
-                    Ok(Expr::Unary(Unary::Not(Box::new(expr))))
+                    let kind = ExprKind::Unary(Unary::Not(Box::new(expr)));
+                    Ok(Expr::new(t, kind))
                 }
                 _ => self.parse_primary(),
             })
@@ -297,26 +312,31 @@ impl Parser {
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         self.peek()
             .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
-            .and_then(|t| match t.ttype {
+            .and_then(|t| match &t.ttype {
                 TokenType::Number(n) => {
                     self.advance();
-                    Ok(Expr::Literal(Literal::Number(n)))
+                    let kind: ExprKind = ExprKind::Literal(Literal::Number(*n));
+                    Ok(Expr::new(t, kind))
                 }
                 TokenType::String(s) => {
                     self.advance();
-                    Ok(Expr::Literal(Literal::String(s)))
+                    let kind = ExprKind::Literal(Literal::String(s.clone()));
+                    Ok(Expr::new(t, kind))
                 }
                 TokenType::True => {
                     self.advance();
-                    Ok(Expr::Literal(Literal::Bool(true)))
+                    let kind = ExprKind::Literal(Literal::Bool(true));
+                    Ok(Expr::new(t, kind))
                 }
                 TokenType::False => {
                     self.advance();
-                    Ok(Expr::Literal(Literal::Bool(false)))
+                    let kind = ExprKind::Literal(Literal::Bool(false));
+                    Ok(Expr::new(t, kind))
                 }
                 TokenType::Nil => {
                     self.advance();
-                    Ok(Expr::Literal(Literal::Nil))
+                    let kind = ExprKind::Literal(Literal::Nil);
+                    Ok(Expr::new(t, kind))
                 }
                 TokenType::LeftParen => {
                     self.advance();
@@ -325,7 +345,10 @@ impl Parser {
                         Some(Token {
                             ttype: TokenType::RightParen,
                             ..
-                        }) => Ok(Expr::Grouping(Box::new(expr))),
+                        }) => {
+                            let kind = ExprKind::Grouping(Box::new(expr));
+                            Ok(Expr::new(t, kind))
+                        }
                         _ => Err(self.error(ParseErrorKind::ExpectRightParen)),
                     }
                 }

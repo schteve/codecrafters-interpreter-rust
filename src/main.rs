@@ -82,7 +82,7 @@ fn main() -> ExitCode {
             let result = evaluator::eval(&ast);
             if let Err(e) = result {
                 eprintln!("{e}");
-                return ExitCode::from(65);
+                return ExitCode::from(70);
             }
             let result = result.unwrap();
             println!("{result}");
