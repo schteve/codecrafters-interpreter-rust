@@ -1,6 +1,7 @@
 use std::{env, fs, process::ExitCode};
 
 mod evaluator;
+mod expr;
 mod parser;
 mod scanner;
 mod token;

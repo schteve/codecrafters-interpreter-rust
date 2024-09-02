@@ -3,7 +3,7 @@ use std::fmt::Display;
 use thiserror::Error;
 
 use crate::{
-    parser::{Binary, Expr, ExprKind, Literal, Unary},
+    expr::{Binary, Expr, ExprKind, Literal, Unary},
     token::Token,
 };
 
