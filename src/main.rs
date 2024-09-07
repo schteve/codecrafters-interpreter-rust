@@ -1,7 +1,7 @@
 use std::{env, fs, process::ExitCode};
 
-mod evaluator;
 mod expr;
+mod interpreter;
 mod parser;
 mod scanner;
 mod token;
@@ -80,7 +80,7 @@ fn main() -> ExitCode {
             }
             let ast = ast.unwrap();
 
-            let result = evaluator::eval(&ast);
+            let result = interpreter::eval(&ast);
             if let Err(e) = result {
                 eprintln!("{e}");
                 return ExitCode::from(70);
