@@ -4,13 +4,14 @@ mod expr;
 mod interpreter;
 mod parser;
 mod scanner;
+mod stmt;
 mod token;
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!(
-            "Usage: {} [tokenize | parse | evaluate] <filename>",
+            "Usage: {} [tokenize | parse | evaluate | run] <filename>",
             args[0]
         );
         return ExitCode::from(128);
@@ -49,9 +50,9 @@ fn main() -> ExitCode {
             }
 
             let mut parser = parser::Parser::new(tokens);
-            match parser.parse_ast() {
-                Ok(ast) => {
-                    ast.print();
+            match parser.parse_expr() {
+                Ok(expr) => {
+                    expr.print();
                     println!();
                 }
                 Err(e) => {
@@ -73,6 +74,34 @@ fn main() -> ExitCode {
             }
 
             let mut parser = parser::Parser::new(tokens);
+            let expr = parser.parse_expr();
+            if let Err(e) = expr {
+                eprintln!("{e}");
+                return ExitCode::from(65);
+            }
+            let expr = expr.unwrap();
+
+            let result = interpreter::eval(&expr);
+            if let Err(e) = result {
+                eprintln!("{e}");
+                return ExitCode::from(70);
+            }
+            let result = result.unwrap();
+            println!("{result}");
+        }
+        "run" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                eprintln!("Failed to read file {}", filename);
+                String::new()
+            });
+
+            let mut scanner = scanner::Scanner::new(&file_contents);
+            let tokens = scanner.scan_tokens();
+            if scanner.had_error() {
+                return ExitCode::from(65);
+            }
+
+            let mut parser = parser::Parser::new(tokens);
             let ast = parser.parse_ast();
             if let Err(e) = ast {
                 eprintln!("{e}");
@@ -80,13 +109,11 @@ fn main() -> ExitCode {
             }
             let ast = ast.unwrap();
 
-            let result = interpreter::eval(&ast);
+            let result = interpreter::interpret(&ast);
             if let Err(e) = result {
                 eprintln!("{e}");
                 return ExitCode::from(70);
             }
-            let result = result.unwrap();
-            println!("{result}");
         }
         _ => {
             eprintln!("Unknown command: {}", command);

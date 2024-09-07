@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::{
     expr::{Binary, Expr, ExprKind, Literal, Unary},
+    stmt::Stmt,
     token::{Token, TokenType},
 };
 
@@ -14,6 +15,8 @@ pub enum ParseErrorKind {
     ExpectRightParen,
     #[error("Expect expression.")]
     ExpectExpression,
+    #[error("Expect semicolon.")]
+    ExpectSemicolon,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -36,11 +39,48 @@ impl Parser {
         Self { tokens, current: 0 }
     }
 
-    pub fn parse_ast(&mut self) -> Result<Expr, ParseError> {
-        self.parse_expr()
+    pub fn parse_ast(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut stmts = Vec::new();
+        while let Some(t) = self.peek() {
+            if t.ttype == TokenType::Eof {
+                break;
+            }
+
+            let stmt = self.parse_stmt()?;
+            stmts.push(stmt);
+        }
+        Ok(stmts)
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+    fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        self.peek()
+            .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
+            .and_then(|t| match &t.ttype {
+                TokenType::Print => {
+                    self.advance();
+                    let expr = self.parse_expr()?;
+                    match self.advance() {
+                        Some(Token {
+                            ttype: TokenType::Semicolon,
+                            ..
+                        }) => Ok(Stmt::Print(expr)),
+                        _ => Err(self.error(ParseErrorKind::ExpectSemicolon)),
+                    }
+                }
+                _ => {
+                    let expr = self.parse_expr()?;
+                    match self.advance() {
+                        Some(Token {
+                            ttype: TokenType::Semicolon,
+                            ..
+                        }) => Ok(Stmt::Expr(expr)),
+                        _ => Err(self.error(ParseErrorKind::ExpectSemicolon)),
+                    }
+                }
+            })
+    }
+
+    pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
         self.parse_equality()
     }
 

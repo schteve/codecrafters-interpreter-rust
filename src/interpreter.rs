@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use crate::{
     expr::{Binary, Expr, ExprKind, Literal, Unary},
+    stmt::Stmt,
     token::Token,
 };
 
@@ -231,4 +232,19 @@ pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
             }
         },
     }
+}
+
+pub fn interpret(stmts: &[Stmt]) -> Result<(), RuntimeError> {
+    for stmt in stmts {
+        match stmt {
+            Stmt::Expr(expr) => {
+                eval(expr)?;
+            }
+            Stmt::Print(expr) => {
+                let value = eval(expr)?;
+                println!("{value}");
+            }
+        }
+    }
+    Ok(())
 }
