@@ -8,6 +8,7 @@ use crate::{
     token::Token,
 };
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum RuntimeErrorKind {
     #[error("Operand must be a number.")]
