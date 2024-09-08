@@ -1,5 +1,7 @@
 use std::{env, fs, process::ExitCode};
 
+use interpreter::Interpreter;
+
 mod expr;
 mod interpreter;
 mod parser;
@@ -81,7 +83,8 @@ fn main() -> ExitCode {
             }
             let expr = expr.unwrap();
 
-            let result = interpreter::eval(&expr);
+            let mut interpreter = Interpreter::new();
+            let result = interpreter.eval(&expr);
             if let Err(e) = result {
                 eprintln!("{e}");
                 return ExitCode::from(70);
@@ -109,7 +112,8 @@ fn main() -> ExitCode {
             }
             let ast = ast.unwrap();
 
-            let result = interpreter::interpret(&ast);
+            let mut interpreter = Interpreter::new();
+            let result = interpreter.interpret(&ast);
             if let Err(e) = result {
                 eprintln!("{e}");
                 return ExitCode::from(70);

@@ -30,6 +30,7 @@ pub enum ExprKind {
     Grouping(Box<Expr>),
     Unary(Unary),
     Binary(Binary),
+    Variable(String),
 }
 
 pub struct Expr {
@@ -139,6 +140,7 @@ impl Expr {
                     print!(")");
                 }
             },
+            ExprKind::Variable(name) => print!("(var {name})"),
         }
     }
 }

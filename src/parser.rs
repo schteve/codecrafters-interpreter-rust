@@ -17,6 +17,10 @@ pub enum ParseErrorKind {
     ExpectExpression,
     #[error("Expect semicolon.")]
     ExpectSemicolon,
+    #[error("Expect identifier.")]
+    ExpectIdentifier,
+    #[error("Expect semicolon or equals.")]
+    ExpectSemicolonOrEquals,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -46,10 +50,56 @@ impl Parser {
                 break;
             }
 
-            let stmt = self.parse_stmt()?;
+            let stmt = self.parse_declaration()?;
             stmts.push(stmt);
         }
         Ok(stmts)
+    }
+
+    fn parse_declaration(&mut self) -> Result<Stmt, ParseError> {
+        self.peek()
+            .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
+            .and_then(|t| match &t.ttype {
+                TokenType::Var => {
+                    self.advance();
+
+                    let ident = match self.advance() {
+                        Some(Token {
+                            ttype: TokenType::Identifier,
+                            lexeme,
+                            ..
+                        }) => lexeme,
+                        _ => return Err(self.error(ParseErrorKind::ExpectIdentifier)),
+                    };
+
+                    let initializer = match self.advance() {
+                        Some(Token {
+                            ttype: TokenType::Semicolon,
+                            ..
+                        }) => None,
+                        Some(Token {
+                            ttype: TokenType::Equal,
+                            ..
+                        }) => {
+                            let expr = self
+                                .parse_expr()
+                                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
+                            match self.advance() {
+                                Some(Token {
+                                    ttype: TokenType::Semicolon,
+                                    ..
+                                }) => (),
+                                _ => return Err(self.error(ParseErrorKind::ExpectSemicolon)),
+                            }
+                            Some(expr)
+                        }
+                        _ => return Err(self.error(ParseErrorKind::ExpectSemicolonOrEquals)),
+                    };
+
+                    Ok(Stmt::VarDecl(ident, initializer))
+                }
+                _ => self.parse_stmt(),
+            })
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -251,6 +301,12 @@ impl Parser {
                         }
                         _ => Err(self.error(ParseErrorKind::ExpectRightParen)),
                     }
+                }
+                TokenType::Identifier => {
+                    self.advance();
+                    let name = t.lexeme.clone();
+                    let kind = ExprKind::Variable(name);
+                    Ok(Expr::new(t, kind))
                 }
                 _ => Err(self.error(ParseErrorKind::NoValidExpr)),
             })

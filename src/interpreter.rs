@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use thiserror::Error;
 
@@ -17,6 +17,8 @@ pub enum RuntimeErrorKind {
     OperandNumbers,
     #[error("Operands must be two numbers or two strings.")]
     OperandNumbersOrStrings,
+    #[error("Undefined variable '{0}'.")]
+    UndefinedVariable(String),
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -35,7 +37,7 @@ impl RuntimeError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Number(f64),
     String(String),
@@ -75,177 +77,224 @@ impl Display for Value {
     }
 }
 
-pub fn eval(expr: &Expr) -> Result<Value, RuntimeError> {
-    match &expr.kind {
-        ExprKind::Literal(lit) => match lit {
-            Literal::Number(n) => Ok(Value::Number(*n)),
-            Literal::String(s) => Ok(Value::String(s.clone())),
-            Literal::Bool(b) => Ok(Value::Bool(*b)),
-            Literal::Nil => Ok(Value::Nil),
-        },
-        ExprKind::Grouping(expr) => eval(expr),
-        ExprKind::Unary(un) => match un {
-            Unary::Negate(expr) => {
-                let expr_value = eval(expr)?;
-                match expr_value {
-                    Value::Number(n) => Ok(Value::Number(-n)),
-                    _ => Err(RuntimeError::new(
-                        expr.token.clone(),
-                        RuntimeErrorKind::OperandNumber,
-                    )),
-                }
-            }
-            Unary::Not(expr) => {
-                let expr_value = eval(expr)?;
-                let truth = expr_value.truthify();
-                Ok(Value::Bool(!truth))
-            }
-        },
-        ExprKind::Binary(bin) => match bin {
-            Binary::Add(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
+struct Environment {
+    vars: HashMap<String, Value>,
+}
 
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Number(left_n + right_n))
-                    }
-                    (Value::String(left_s), Value::String(right_s)) => {
-                        Ok(Value::String(format!("{}{}", left_s, right_s)))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbersOrStrings,
-                    )),
-                }
-            }
-            Binary::Sub(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
+impl Environment {
+    pub fn new() -> Self {
+        Self {
+            vars: HashMap::new(),
+        }
+    }
 
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Number(left_n - right_n))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbers,
-                    )),
-                }
-            }
-            Binary::Mul(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
+    fn define(&mut self, name: String, value: Option<Value>) {
+        let value = value.unwrap_or(Value::Nil);
+        self.vars.insert(name, value);
+    }
 
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Number(left_n * right_n))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbers,
-                    )),
-                }
-            }
-            Binary::Div(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
-
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Number(left_n / right_n))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbers,
-                    )),
-                }
-            }
-            Binary::Less(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
-
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Bool(left_n < right_n))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbers,
-                    )),
-                }
-            }
-            Binary::LessEqual(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
-
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Bool(left_n <= right_n))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbers,
-                    )),
-                }
-            }
-            Binary::Greater(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
-
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Bool(left_n > right_n))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbers,
-                    )),
-                }
-            }
-            Binary::GreaterEqual(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
-
-                match (&left_value, &right_value) {
-                    (Value::Number(left_n), Value::Number(right_n)) => {
-                        Ok(Value::Bool(left_n >= right_n))
-                    }
-                    _ => Err(RuntimeError::new(
-                        left.token.clone(),
-                        RuntimeErrorKind::OperandNumbers,
-                    )),
-                }
-            }
-            Binary::Equal(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
-
-                let eq = left_value.is_equal(&right_value);
-                Ok(Value::Bool(eq))
-            }
-            Binary::NotEqual(left, right) => {
-                let left_value = eval(left)?;
-                let right_value = eval(right)?;
-
-                let eq = left_value.is_equal(&right_value);
-                Ok(Value::Bool(!eq))
-            }
-        },
+    fn get(&self, name: &str) -> Option<Value> {
+        self.vars.get(name).cloned()
     }
 }
 
-pub fn interpret(stmts: &[Stmt]) -> Result<(), RuntimeError> {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Expr(expr) => {
-                eval(expr)?;
-            }
-            Stmt::Print(expr) => {
-                let value = eval(expr)?;
-                println!("{value}");
-            }
+pub struct Interpreter {
+    env: Environment,
+}
+
+impl Interpreter {
+    pub fn new() -> Self {
+        Self {
+            env: Environment::new(),
         }
     }
-    Ok(())
+
+    pub fn eval(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+        match &expr.kind {
+            ExprKind::Literal(lit) => match lit {
+                Literal::Number(n) => Ok(Value::Number(*n)),
+                Literal::String(s) => Ok(Value::String(s.clone())),
+                Literal::Bool(b) => Ok(Value::Bool(*b)),
+                Literal::Nil => Ok(Value::Nil),
+            },
+            ExprKind::Grouping(expr) => self.eval(expr),
+            ExprKind::Unary(un) => match un {
+                Unary::Negate(expr) => {
+                    let expr_value = self.eval(expr)?;
+                    match expr_value {
+                        Value::Number(n) => Ok(Value::Number(-n)),
+                        _ => Err(RuntimeError::new(
+                            expr.token.clone(),
+                            RuntimeErrorKind::OperandNumber,
+                        )),
+                    }
+                }
+                Unary::Not(expr) => {
+                    let expr_value = self.eval(expr)?;
+                    let truth = expr_value.truthify();
+                    Ok(Value::Bool(!truth))
+                }
+            },
+            ExprKind::Binary(bin) => match bin {
+                Binary::Add(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Number(left_n + right_n))
+                        }
+                        (Value::String(left_s), Value::String(right_s)) => {
+                            Ok(Value::String(format!("{}{}", left_s, right_s)))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbersOrStrings,
+                        )),
+                    }
+                }
+                Binary::Sub(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Number(left_n - right_n))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbers,
+                        )),
+                    }
+                }
+                Binary::Mul(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Number(left_n * right_n))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbers,
+                        )),
+                    }
+                }
+                Binary::Div(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Number(left_n / right_n))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbers,
+                        )),
+                    }
+                }
+                Binary::Less(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Bool(left_n < right_n))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbers,
+                        )),
+                    }
+                }
+                Binary::LessEqual(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Bool(left_n <= right_n))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbers,
+                        )),
+                    }
+                }
+                Binary::Greater(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Bool(left_n > right_n))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbers,
+                        )),
+                    }
+                }
+                Binary::GreaterEqual(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    match (&left_value, &right_value) {
+                        (Value::Number(left_n), Value::Number(right_n)) => {
+                            Ok(Value::Bool(left_n >= right_n))
+                        }
+                        _ => Err(RuntimeError::new(
+                            left.token.clone(),
+                            RuntimeErrorKind::OperandNumbers,
+                        )),
+                    }
+                }
+                Binary::Equal(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    let eq = left_value.is_equal(&right_value);
+                    Ok(Value::Bool(eq))
+                }
+                Binary::NotEqual(left, right) => {
+                    let left_value = self.eval(left)?;
+                    let right_value = self.eval(right)?;
+
+                    let eq = left_value.is_equal(&right_value);
+                    Ok(Value::Bool(!eq))
+                }
+            },
+            ExprKind::Variable(name) => self.env.get(name).ok_or_else(|| {
+                RuntimeError::new(
+                    expr.token.clone(),
+                    RuntimeErrorKind::UndefinedVariable(name.clone()),
+                )
+            }),
+        }
+    }
+
+    pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
+        for stmt in stmts {
+            match stmt {
+                Stmt::Expr(expr) => {
+                    self.eval(expr)?;
+                }
+                Stmt::Print(expr) => {
+                    let value = self.eval(expr)?;
+                    println!("{value}");
+                }
+                Stmt::VarDecl(name, initializer) => {
+                    let value = if let Some(expr) = initializer {
+                        Some(self.eval(expr)?)
+                    } else {
+                        None
+                    };
+                    self.env.define(name.clone(), value);
+                }
+            }
+        }
+        Ok(())
+    }
 }
