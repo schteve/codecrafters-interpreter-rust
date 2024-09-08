@@ -96,6 +96,10 @@ impl Environment {
     fn get(&self, name: &str) -> Option<Value> {
         self.vars.get(name).cloned()
     }
+
+    fn set(&mut self, name: String, value: Value) -> Option<Value> {
+        self.vars.insert(name, value)
+    }
 }
 
 pub struct Interpreter {
@@ -272,6 +276,16 @@ impl Interpreter {
                     RuntimeErrorKind::UndefinedVariable(name.clone()),
                 )
             }),
+            ExprKind::Assign(name, value) => {
+                let value = self.eval(value)?;
+                match self.env.set(name.clone(), value.clone()) {
+                    Some(_) => Ok(value),
+                    None => Err(RuntimeError::new(
+                        expr.token.clone(),
+                        RuntimeErrorKind::UndefinedVariable(name.clone()),
+                    )),
+                }
+            }
         }
     }
 

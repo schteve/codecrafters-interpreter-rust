@@ -21,6 +21,8 @@ pub enum ParseErrorKind {
     ExpectIdentifier,
     #[error("Expect semicolon or equals.")]
     ExpectSemicolonOrEquals,
+    #[error("Invalid assignment target.")]
+    InvalidAssignment,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -131,7 +133,28 @@ impl Parser {
     }
 
     pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.parse_equality()?;
+
+        self.peek()
+            .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
+            .and_then(|t| match &t.ttype {
+                TokenType::Equal => {
+                    self.advance();
+                    let value = self.parse_assignment()?;
+                    match expr.kind {
+                        ExprKind::Variable(name) => Ok(Expr::new(
+                            expr.token,
+                            ExprKind::Assign(name, Box::new(value)),
+                        )),
+                        _ => Err(self.error(ParseErrorKind::InvalidAssignment)),
+                    }
+                }
+                _ => Ok(expr),
+            })
     }
 
     fn parse_equality(&mut self) -> Result<Expr, ParseError> {

@@ -31,6 +31,7 @@ pub enum ExprKind {
     Unary(Unary),
     Binary(Binary),
     Variable(String),
+    Assign(String, Box<Expr>),
 }
 
 pub struct Expr {
@@ -141,6 +142,11 @@ impl Expr {
                 }
             },
             ExprKind::Variable(name) => print!("(var {name})"),
+            ExprKind::Assign(name, value) => {
+                print!("({name} = ");
+                value.print();
+                print!(")");
+            }
         }
     }
 }
