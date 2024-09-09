@@ -23,6 +23,8 @@ pub enum ParseErrorKind {
     ExpectSemicolonOrEquals,
     #[error("Invalid assignment target.")]
     InvalidAssignment,
+    #[error("Expect right brace.")]
+    ExpectRightBrace,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -118,6 +120,25 @@ impl Parser {
                         }) => Ok(Stmt::Print(expr)),
                         _ => Err(self.error(ParseErrorKind::ExpectSemicolon)),
                     }
+                }
+                TokenType::LeftBrace => {
+                    self.advance();
+
+                    let mut stmts = Vec::new();
+                    while let Some(t) = self.peek() {
+                        match t.ttype {
+                            TokenType::RightBrace => {
+                                self.advance();
+                                return Ok(Stmt::Block(stmts));
+                            }
+                            TokenType::Eof => break,
+                            _ => {
+                                let stmt = self.parse_declaration()?;
+                                stmts.push(stmt);
+                            }
+                        }
+                    }
+                    Err(self.error(ParseErrorKind::ExpectRightBrace))
                 }
                 _ => {
                     let expr = self.parse_expr()?;

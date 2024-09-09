@@ -78,27 +78,44 @@ impl Display for Value {
 }
 
 struct Environment {
-    vars: HashMap<String, Value>,
+    vars: Vec<HashMap<String, Value>>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         Self {
-            vars: HashMap::new(),
+            vars: vec![HashMap::new()],
         }
     }
 
     fn define(&mut self, name: String, value: Option<Value>) {
         let value = value.unwrap_or(Value::Nil);
-        self.vars.insert(name, value);
+        self.vars
+            .last_mut()
+            .expect("Globals exist")
+            .insert(name, value);
     }
 
     fn get(&self, name: &str) -> Option<Value> {
-        self.vars.get(name).cloned()
+        self.vars
+            .iter()
+            .rev()
+            .find_map(|map| map.get(name).cloned())
     }
 
     fn set(&mut self, name: String, value: Value) -> Option<Value> {
-        self.vars.insert(name, value)
+        self.vars
+            .last_mut()
+            .expect("Globals exist")
+            .insert(name, value)
+    }
+
+    fn push(&mut self) {
+        self.vars.push(HashMap::new());
+    }
+
+    fn pop(&mut self) {
+        self.vars.pop();
     }
 }
 
@@ -306,6 +323,11 @@ impl Interpreter {
                         None
                     };
                     self.env.define(name.clone(), value);
+                }
+                Stmt::Block(stmts) => {
+                    self.env.push();
+                    self.interpret(stmts)?;
+                    self.env.pop();
                 }
             }
         }
