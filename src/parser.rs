@@ -67,14 +67,9 @@ impl Parser {
                 TokenType::Var => {
                     self.advance();
 
-                    let ident = match self.advance() {
-                        Some(Token {
-                            ttype: TokenType::Identifier,
-                            lexeme,
-                            ..
-                        }) => lexeme,
-                        _ => return Err(self.error(ParseErrorKind::ExpectIdentifier)),
-                    };
+                    let ident = self
+                        .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
+                        .lexeme;
 
                     let initializer = match self.advance() {
                         Some(Token {
@@ -88,13 +83,7 @@ impl Parser {
                             let expr = self
                                 .parse_expr()
                                 .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
-                            match self.advance() {
-                                Some(Token {
-                                    ttype: TokenType::Semicolon,
-                                    ..
-                                }) => (),
-                                _ => return Err(self.error(ParseErrorKind::ExpectSemicolon)),
-                            }
+                            self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
                             Some(expr)
                         }
                         _ => return Err(self.error(ParseErrorKind::ExpectSemicolonOrEquals)),
@@ -113,13 +102,8 @@ impl Parser {
                 TokenType::Print => {
                     self.advance();
                     let expr = self.parse_expr()?;
-                    match self.advance() {
-                        Some(Token {
-                            ttype: TokenType::Semicolon,
-                            ..
-                        }) => Ok(Stmt::Print(expr)),
-                        _ => Err(self.error(ParseErrorKind::ExpectSemicolon)),
-                    }
+                    self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
+                    Ok(Stmt::Print(expr))
                 }
                 TokenType::LeftBrace => {
                     self.advance();
@@ -142,13 +126,8 @@ impl Parser {
                 }
                 _ => {
                     let expr = self.parse_expr()?;
-                    match self.advance() {
-                        Some(Token {
-                            ttype: TokenType::Semicolon,
-                            ..
-                        }) => Ok(Stmt::Expr(expr)),
-                        _ => Err(self.error(ParseErrorKind::ExpectSemicolon)),
-                    }
+                    self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
+                    Ok(Stmt::Expr(expr))
                 }
             })
     }
@@ -335,16 +314,9 @@ impl Parser {
                 TokenType::LeftParen => {
                     self.advance();
                     let expr = self.parse_expr()?;
-                    match self.advance() {
-                        Some(Token {
-                            ttype: TokenType::RightParen,
-                            ..
-                        }) => {
-                            let kind = ExprKind::Grouping(Box::new(expr));
-                            Ok(Expr::new(t, kind))
-                        }
-                        _ => Err(self.error(ParseErrorKind::ExpectRightParen)),
-                    }
+                    self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
+                    let kind = ExprKind::Grouping(Box::new(expr));
+                    Ok(Expr::new(t, kind))
                 }
                 TokenType::Identifier => {
                     self.advance();
@@ -371,6 +343,12 @@ impl Parser {
             self.current += 1;
         }
         t
+    }
+
+    fn expect(&mut self, ttype: TokenType, err_kind: ParseErrorKind) -> Result<Token, ParseError> {
+        self.advance()
+            .filter(|t| t.ttype == ttype)
+            .ok_or(self.error(err_kind))
     }
 
     fn error(&self, kind: ParseErrorKind) -> ParseError {
