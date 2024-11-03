@@ -101,6 +101,7 @@ impl Parser {
             .and_then(|t| match &t.ttype {
                 TokenType::Print => {
                     self.advance();
+
                     let expr = self.parse_expr()?;
                     self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
                     Ok(Stmt::Print(expr))
@@ -113,6 +114,7 @@ impl Parser {
                         match t.ttype {
                             TokenType::RightBrace => {
                                 self.advance();
+
                                 return Ok(Stmt::Block(stmts));
                             }
                             TokenType::Eof => break,
@@ -144,6 +146,7 @@ impl Parser {
             .and_then(|t| match &t.ttype {
                 TokenType::Equal => {
                     self.advance();
+
                     let value = self.parse_assignment()?;
                     match expr.kind {
                         ExprKind::Variable(name) => Ok(Expr::new(
@@ -268,12 +271,14 @@ impl Parser {
             .and_then(|t| match t.ttype {
                 TokenType::Minus => {
                     self.advance();
+
                     let expr = self.parse_unary()?;
                     let kind = ExprKind::Unary(Unary::Negate(Box::new(expr)));
                     Ok(Expr::new(t, kind))
                 }
                 TokenType::Bang => {
                     self.advance();
+
                     let expr = self.parse_unary()?;
                     let kind = ExprKind::Unary(Unary::Not(Box::new(expr)));
                     Ok(Expr::new(t, kind))
@@ -288,31 +293,37 @@ impl Parser {
             .and_then(|t| match &t.ttype {
                 TokenType::Number(n) => {
                     self.advance();
+
                     let kind: ExprKind = ExprKind::Literal(Literal::Number(*n));
                     Ok(Expr::new(t, kind))
                 }
                 TokenType::String(s) => {
                     self.advance();
+
                     let kind = ExprKind::Literal(Literal::String(s.clone()));
                     Ok(Expr::new(t, kind))
                 }
                 TokenType::True => {
                     self.advance();
+
                     let kind = ExprKind::Literal(Literal::Bool(true));
                     Ok(Expr::new(t, kind))
                 }
                 TokenType::False => {
                     self.advance();
+
                     let kind = ExprKind::Literal(Literal::Bool(false));
                     Ok(Expr::new(t, kind))
                 }
                 TokenType::Nil => {
                     self.advance();
+
                     let kind = ExprKind::Literal(Literal::Nil);
                     Ok(Expr::new(t, kind))
                 }
                 TokenType::LeftParen => {
                     self.advance();
+
                     let expr = self.parse_expr()?;
                     self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
                     let kind = ExprKind::Grouping(Box::new(expr));
@@ -320,6 +331,7 @@ impl Parser {
                 }
                 TokenType::Identifier => {
                     self.advance();
+
                     let name = t.lexeme.clone();
                     let kind = ExprKind::Variable(name);
                     Ok(Expr::new(t, kind))
