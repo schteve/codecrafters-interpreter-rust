@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, mem};
+use std::{collections::HashMap, fmt::Display, mem, slice};
 
 use thiserror::Error;
 
@@ -313,6 +313,18 @@ impl Interpreter {
             match stmt {
                 Stmt::Expr(expr) => {
                     self.eval(expr)?;
+                }
+                Stmt::If(cond, true_branch, false_branch) => {
+                    let cond_result = self.eval(cond)?.truthify();
+                    if cond_result {
+                        let tb = slice::from_ref(true_branch.as_ref());
+                        self.interpret(tb)?;
+                    } else if let Some(fb) = false_branch {
+                        let fb = slice::from_ref(fb.as_ref());
+                        self.interpret(fb)?;
+                    } else {
+                        // Do nothing
+                    }
                 }
                 Stmt::Print(expr) => {
                     let value = self.eval(expr)?;

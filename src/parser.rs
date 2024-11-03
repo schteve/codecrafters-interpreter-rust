@@ -11,6 +11,8 @@ use crate::{
 pub enum ParseErrorKind {
     #[error("No valid expression")]
     NoValidExpr,
+    #[error("Expect '(' before expression.")]
+    ExpectLeftParen,
     #[error("Expect ')' after expression.")]
     ExpectRightParen,
     #[error("Expect expression.")]
@@ -99,6 +101,28 @@ impl Parser {
         self.peek()
             .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
             .and_then(|t| match &t.ttype {
+                TokenType::If => {
+                    self.advance();
+
+                    self.expect(TokenType::LeftParen, ParseErrorKind::ExpectLeftParen)?;
+                    let cond = self.parse_expr()?;
+                    self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
+
+                    let true_branch = Box::new(self.parse_stmt()?);
+                    let false_branch = if let Some(Token {
+                        ttype: TokenType::Else,
+                        ..
+                    }) = self.peek()
+                    {
+                        self.advance();
+
+                        Some(Box::new(self.parse_stmt()?))
+                    } else {
+                        None
+                    };
+
+                    Ok(Stmt::If(cond, true_branch, false_branch))
+                }
                 TokenType::Print => {
                     self.advance();
 
