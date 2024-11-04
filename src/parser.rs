@@ -163,7 +163,7 @@ impl Parser {
     }
 
     fn parse_assignment(&mut self) -> Result<Expr, ParseError> {
-        let expr = self.parse_equality()?;
+        let expr = self.parse_logic_or()?;
 
         self.peek()
             .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
@@ -182,6 +182,40 @@ impl Parser {
                 }
                 _ => Ok(expr),
             })
+    }
+
+    fn parse_logic_or(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_logic_and()?;
+
+        while let Some(Token {
+            ttype: TokenType::Or,
+            ..
+        }) = self.peek()
+        {
+            let operator = self.advance().unwrap();
+            let right = self.parse_logic_and()?;
+            let kind = ExprKind::Binary(Binary::Or(Box::new(expr), Box::new(right)));
+            expr = Expr::new(operator, kind);
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_logic_and(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_equality()?;
+
+        while let Some(Token {
+            ttype: TokenType::And,
+            ..
+        }) = self.peek()
+        {
+            let operator = self.advance().unwrap();
+            let right = self.parse_equality()?;
+            let kind = ExprKind::Binary(Binary::And(Box::new(expr), Box::new(right)));
+            expr = Expr::new(operator, kind);
+        }
+
+        Ok(expr)
     }
 
     fn parse_equality(&mut self) -> Result<Expr, ParseError> {

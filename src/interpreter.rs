@@ -288,6 +288,22 @@ impl Interpreter {
                     let eq = left_value.is_equal(&right_value);
                     Ok(Value::Bool(!eq))
                 }
+                Binary::Or(left, right) => {
+                    let left_value = self.eval(left)?;
+                    if left_value.truthify() {
+                        Ok(left_value)
+                    } else {
+                        Ok(self.eval(right)?)
+                    }
+                }
+                Binary::And(left, right) => {
+                    let left_value = self.eval(left)?;
+                    if !left_value.truthify() {
+                        Ok(left_value)
+                    } else {
+                        Ok(self.eval(right)?)
+                    }
+                }
             },
             ExprKind::Variable(name) => self.env.get(name).ok_or_else(|| {
                 RuntimeError::new(

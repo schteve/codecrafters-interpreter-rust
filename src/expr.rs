@@ -23,6 +23,8 @@ pub enum Binary {
     GreaterEqual(Box<Expr>, Box<Expr>),
     Equal(Box<Expr>, Box<Expr>),
     NotEqual(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
 }
 
 pub enum ExprKind {
@@ -135,6 +137,20 @@ impl Expr {
                 }
                 Binary::NotEqual(left, right) => {
                     print!("(!= ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
+                Binary::Or(left, right) => {
+                    print!("(or ");
+                    left.print();
+                    print!(" ");
+                    right.print();
+                    print!(")");
+                }
+                Binary::And(left, right) => {
+                    print!("(and ");
                     left.print();
                     print!(" ");
                     right.print();
