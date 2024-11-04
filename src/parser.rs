@@ -130,6 +130,15 @@ impl Parser {
                     self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
                     Ok(Stmt::Print(expr))
                 }
+                TokenType::While => {
+                    self.advance();
+
+                    self.expect(TokenType::LeftParen, ParseErrorKind::ExpectLeftParen)?;
+                    let cond = self.parse_expr()?;
+                    self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
+                    let body = self.parse_stmt()?;
+                    Ok(Stmt::While(cond, Box::new(body)))
+                }
                 TokenType::LeftBrace => {
                     self.advance();
 

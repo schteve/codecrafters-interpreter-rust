@@ -346,6 +346,12 @@ impl Interpreter {
                     let value = self.eval(expr)?;
                     println!("{value}");
                 }
+                Stmt::While(cond, body) => {
+                    while self.eval(cond)?.truthify() {
+                        let body_slice = slice::from_ref(body.as_ref());
+                        self.interpret(body_slice)?;
+                    }
+                }
                 Stmt::VarDecl(name, initializer) => {
                     let value = if let Some(expr) = initializer {
                         Some(self.eval(expr)?)
