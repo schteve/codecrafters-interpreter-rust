@@ -27,6 +27,8 @@ pub enum ParseErrorKind {
     InvalidAssignment,
     #[error("Expect right brace.")]
     ExpectRightBrace,
+    #[error("Expect Var declaration.")]
+    ExpectVar,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -66,41 +68,107 @@ impl Parser {
         self.peek()
             .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
             .and_then(|t| match &t.ttype {
-                TokenType::Var => {
-                    self.advance();
-
-                    let ident = self
-                        .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
-                        .lexeme;
-
-                    let initializer = match self.advance() {
-                        Some(Token {
-                            ttype: TokenType::Semicolon,
-                            ..
-                        }) => None,
-                        Some(Token {
-                            ttype: TokenType::Equal,
-                            ..
-                        }) => {
-                            let expr = self
-                                .parse_expr()
-                                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
-                            self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
-                            Some(expr)
-                        }
-                        _ => return Err(self.error(ParseErrorKind::ExpectSemicolonOrEquals)),
-                    };
-
-                    Ok(Stmt::VarDecl(ident, initializer))
-                }
+                TokenType::Var => self.parse_var_decl(),
                 _ => self.parse_stmt(),
             })
+    }
+
+    fn parse_var_decl(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenType::Var, ParseErrorKind::ExpectVar)?;
+
+        let ident = self
+            .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
+            .lexeme;
+
+        let initializer = match self.advance() {
+            Some(Token {
+                ttype: TokenType::Semicolon,
+                ..
+            }) => None,
+            Some(Token {
+                ttype: TokenType::Equal,
+                ..
+            }) => {
+                let expr = self
+                    .parse_expr()
+                    .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
+                self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
+                Some(expr)
+            }
+            _ => return Err(self.error(ParseErrorKind::ExpectSemicolonOrEquals)),
+        };
+
+        Ok(Stmt::VarDecl(ident, initializer))
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.peek()
             .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
             .and_then(|t| match &t.ttype {
+                TokenType::For => {
+                    self.advance();
+
+                    self.expect(TokenType::LeftParen, ParseErrorKind::ExpectLeftParen)?;
+
+                    let initializer = match self
+                        .peek()
+                        .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))?
+                        .ttype
+                    {
+                        TokenType::Semicolon => {
+                            self.advance();
+
+                            None
+                        }
+                        TokenType::Var => Some(self.parse_var_decl()?),
+                        _ => Some(self.parse_expr_stmt()?),
+                    };
+
+                    let condition = match self
+                        .peek()
+                        .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))?
+                        .ttype
+                    {
+                        TokenType::Semicolon => {
+                            self.advance();
+
+                            None
+                        }
+                        _ => Some(self.parse_expr()?),
+                    };
+                    let cond_semi_token =
+                        self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
+
+                    let increment = match self
+                        .peek()
+                        .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))?
+                        .ttype
+                    {
+                        TokenType::RightParen => None,
+                        _ => Some(self.parse_expr()?),
+                    };
+
+                    self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
+
+                    let mut body = self.parse_stmt()?;
+
+                    // Synthesize
+                    if let Some(inc) = increment {
+                        body = Stmt::Block(vec![body, Stmt::Expr(inc)]);
+                    }
+
+                    let cond = condition.unwrap_or(Expr {
+                        token: cond_semi_token,
+                        kind: ExprKind::Literal(Literal::Bool(true)),
+                    });
+                    body = Stmt::While(cond, Box::new(body));
+
+                    if let Some(init) = initializer {
+                        body = Stmt::Block(vec![init, body]);
+                    }
+
+                    Ok(body)
+                }
                 TokenType::If => {
                     self.advance();
 
@@ -159,12 +227,14 @@ impl Parser {
                     }
                     Err(self.error(ParseErrorKind::ExpectRightBrace))
                 }
-                _ => {
-                    let expr = self.parse_expr()?;
-                    self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
-                    Ok(Stmt::Expr(expr))
-                }
+                _ => self.parse_expr_stmt(),
             })
+    }
+
+    fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let expr = self.parse_expr()?;
+        self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
+        Ok(Stmt::Expr(expr))
     }
 
     pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
