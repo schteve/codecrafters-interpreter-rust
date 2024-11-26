@@ -420,8 +420,53 @@ impl Parser {
                     let kind = ExprKind::Unary(Unary::Not(Box::new(expr)));
                     Ok(Expr::new(t, kind))
                 }
-                _ => self.parse_primary(),
+                _ => self.parse_call(),
             })
+    }
+
+    fn parse_call(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_primary()?;
+
+        while let Some(Token {
+            ttype: TokenType::LeftParen,
+            ..
+        }) = self.peek()
+        {
+            self.advance();
+
+            let mut args = Vec::new();
+
+            if !matches!(
+                self.peek(),
+                Some(Token {
+                    ttype: TokenType::RightParen,
+                    ..
+                })
+            ) {
+                loop {
+                    let arg_expr = self
+                        .parse_expr()
+                        .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
+                    args.push(arg_expr);
+
+                    if let Some(Token {
+                        ttype: TokenType::Comma,
+                        ..
+                    }) = self.peek()
+                    {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            let t = self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
+            let kind = ExprKind::Call(Box::new(expr), args);
+            expr = Expr::new(t, kind);
+        }
+
+        Ok(expr)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {

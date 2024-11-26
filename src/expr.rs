@@ -34,6 +34,7 @@ pub enum ExprKind {
     Binary(Binary),
     Variable(String),
     Assign(String, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 pub struct Expr {
@@ -162,6 +163,16 @@ impl Expr {
                 print!("({name} = ");
                 value.print();
                 print!(")");
+            }
+            ExprKind::Call(callee, arguments) => {
+                print!("(call ");
+                callee.print();
+                print!("(");
+                for arg in arguments {
+                    arg.print();
+                    print!(",");
+                }
+                print!("))");
             }
         }
     }

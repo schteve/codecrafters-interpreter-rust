@@ -1,9 +1,16 @@
-use std::{collections::HashMap, fmt::Display, mem, slice};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+    mem,
+    rc::Rc,
+    slice,
+};
 
 use thiserror::Error;
 
 use crate::{
     expr::{Binary, Expr, ExprKind, Literal, Unary},
+    native,
     stmt::Stmt,
     token::Token,
 };
@@ -19,6 +26,10 @@ pub enum RuntimeErrorKind {
     OperandNumbersOrStrings,
     #[error("Undefined variable '{0}'.")]
     UndefinedVariable(String),
+    #[error("Can only call functions and classes.")]
+    NotCallable,
+    #[error("Expected {0} arguments but got {1}.")]
+    WrongArity(u8, u8),
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -43,6 +54,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Nil,
+    Callable(Rc<dyn Callable>),
 }
 
 impl Value {
@@ -52,6 +64,7 @@ impl Value {
             Value::String(_) => true,
             Value::Bool(b) => *b,
             Value::Nil => false,
+            Value::Callable(_) => true,
         }
     }
 
@@ -73,7 +86,19 @@ impl Display for Value {
             Value::String(s) => write!(f, "{s}"),
             Value::Bool(b) => write!(f, "{b}"),
             Value::Nil => write!(f, "nil"),
+            Value::Callable(_) => write!(f, "callable"), // todo
         }
+    }
+}
+
+pub trait Callable {
+    fn arity(&self) -> u8;
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Value;
+}
+
+impl Debug for dyn Callable {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Callable {}", self.arity())
     }
 }
 
@@ -127,9 +152,14 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {
-            env: Environment::new(),
-        }
+        let mut env = Environment::new();
+
+        env.define(
+            "clock".into(),
+            Some(Value::Callable(Rc::new(native::NativeClock {}))),
+        );
+
+        Self { env }
     }
 
     pub fn eval(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
@@ -319,6 +349,31 @@ impl Interpreter {
                         expr.token.clone(),
                         RuntimeErrorKind::UndefinedVariable(name.clone()),
                     )),
+                }
+            }
+            ExprKind::Call(callee, arguments) => {
+                let callee_value = self.eval(callee)?;
+                if let Value::Callable(callable) = callee_value {
+                    let args = arguments
+                        .iter()
+                        .map(|arg| self.eval(arg))
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    let actual_len = args.len() as u8;
+                    let expected_len = callable.arity();
+                    if actual_len != expected_len {
+                        Err(RuntimeError::new(
+                            expr.token.clone(),
+                            RuntimeErrorKind::WrongArity(expected_len, actual_len),
+                        ))
+                    } else {
+                        Ok(callable.call(self, &args))
+                    }
+                } else {
+                    Err(RuntimeError::new(
+                        expr.token.clone(),
+                        RuntimeErrorKind::NotCallable,
+                    ))
                 }
             }
         }

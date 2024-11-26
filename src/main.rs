@@ -4,6 +4,7 @@ use interpreter::Interpreter;
 
 mod expr;
 mod interpreter;
+mod native;
 mod parser;
 mod scanner;
 mod stmt;
