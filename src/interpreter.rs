@@ -86,63 +86,96 @@ impl Display for Value {
             Value::String(s) => write!(f, "{s}"),
             Value::Bool(b) => write!(f, "{b}"),
             Value::Nil => write!(f, "nil"),
-            Value::Callable(_) => write!(f, "callable"), // todo
+            Value::Callable(callable) => write!(f, "<fn {}>", callable.name()),
         }
     }
 }
 
 pub trait Callable {
+    fn name(&self) -> &str;
     fn arity(&self) -> u8;
-    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Value;
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, RuntimeError>;
 }
 
 impl Debug for dyn Callable {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Callable {}", self.arity())
+        write!(f, "<fn {}({})>", self.name(), self.arity())
+    }
+}
+
+struct Scope {
+    parent: Option<usize>,
+    vars: HashMap<String, Value>,
+}
+
+impl Scope {
+    fn new(parent: Option<usize>) -> Self {
+        Self {
+            parent,
+            vars: HashMap::new(),
+        }
     }
 }
 
 struct Environment {
-    vars: Vec<HashMap<String, Value>>,
+    scopes: Vec<Scope>,
 }
 
 impl Environment {
     pub fn new() -> Self {
+        let globals = Scope::new(None);
         Self {
-            vars: vec![HashMap::new()],
+            scopes: vec![globals],
         }
     }
 
     fn define(&mut self, name: String, value: Option<Value>) {
         let value = value.unwrap_or(Value::Nil);
-        self.vars
+        self.scopes
             .last_mut()
             .expect("Globals exist")
+            .vars
             .insert(name, value);
     }
 
     fn get(&self, name: &str) -> Option<Value> {
-        self.vars
-            .iter()
-            .rev()
-            .find_map(|map| map.get(name))
-            .cloned()
+        let mut scope = self.scopes.last();
+        while let Some(s) = scope {
+            if let Some(val) = s.vars.get(name) {
+                return Some(val.clone());
+            }
+            scope = s.parent.and_then(|p| self.scopes.get(p));
+        }
+        None
     }
 
     fn set(&mut self, name: &str, value: Value) -> Option<Value> {
-        self.vars
-            .iter_mut()
-            .rev()
-            .find_map(|map| map.get_mut(name))
-            .map(|item| mem::replace(item, value))
+        let mut scope = self.scopes.last_mut();
+        while let Some(s) = scope {
+            if let Some(val) = s.vars.get_mut(name) {
+                return Some(mem::replace(val, value));
+            }
+            scope = s.parent.and_then(|p| self.scopes.get_mut(p));
+        }
+        None
     }
 
-    fn push(&mut self) {
-        self.vars.push(HashMap::new());
+    fn push_scope_block(&mut self) {
+        assert!(!self.scopes.is_empty());
+        let curr_idx = self.scopes.len() - 1;
+        let new_scope = Scope::new(Some(curr_idx));
+        self.scopes.push(new_scope);
     }
 
-    fn pop(&mut self) {
-        self.vars.pop();
+    fn push_scope_fun(&mut self) {
+        assert!(!self.scopes.is_empty());
+        let fun_scope = Scope::new(Some(0));
+        self.scopes.push(fun_scope);
+    }
+
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+        assert!(!self.scopes.is_empty());
     }
 }
 
@@ -154,9 +187,10 @@ impl Interpreter {
     pub fn new() -> Self {
         let mut env = Environment::new();
 
+        let nat_fun = native::NativeClock {};
         env.define(
-            "clock".into(),
-            Some(Value::Callable(Rc::new(native::NativeClock {}))),
+            nat_fun.name().to_owned(),
+            Some(Value::Callable(Rc::new(nat_fun))),
         );
 
         Self { env }
@@ -367,7 +401,7 @@ impl Interpreter {
                             RuntimeErrorKind::WrongArity(expected_len, actual_len),
                         ))
                     } else {
-                        Ok(callable.call(self, &args))
+                        callable.call(self, &args)
                     }
                 } else {
                     Err(RuntimeError::new(
@@ -415,13 +449,50 @@ impl Interpreter {
                     };
                     self.env.define(name.clone(), value);
                 }
+                Stmt::FunDecl(name, params, body) => {
+                    let value = Value::Callable(Rc::new(FunCallable {
+                        name: name.clone(),
+                        params: params.clone(),
+                        body: body.clone(),
+                    }));
+                    self.env.define(name.clone(), Some(value));
+                }
                 Stmt::Block(stmts) => {
-                    self.env.push();
+                    self.env.push_scope_block();
                     self.interpret(stmts)?;
-                    self.env.pop();
+                    self.env.pop_scope();
                 }
             }
         }
         Ok(())
+    }
+}
+
+struct FunCallable {
+    name: String,
+    params: Vec<String>,
+    body: Vec<Stmt>,
+}
+
+impl Callable for FunCallable {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn arity(&self) -> u8 {
+        self.params.len() as u8
+    }
+
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, RuntimeError> {
+        interpreter.env.push_scope_fun();
+        for (param, arg) in self.params.iter().zip(args) {
+            interpreter.env.define(param.clone(), Some(arg.clone()));
+        }
+
+        interpreter.interpret(&self.body)?;
+
+        interpreter.env.pop_scope();
+
+        Ok(Value::Nil)
     }
 }

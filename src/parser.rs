@@ -25,10 +25,16 @@ pub enum ParseErrorKind {
     ExpectSemicolonOrEquals,
     #[error("Invalid assignment target.")]
     InvalidAssignment,
+    #[error("Expect left brace before body.")]
+    ExpectLeftBrace,
     #[error("Expect right brace.")]
     ExpectRightBrace,
     #[error("Expect Var declaration.")]
     ExpectVar,
+    #[error("Expect Fun declaration.")]
+    ExpectFun,
+    #[error("Can't have more than 255 parameters.")]
+    TooManyParams,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -69,6 +75,7 @@ impl Parser {
             .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
             .and_then(|t| match &t.ttype {
                 TokenType::Var => self.parse_var_decl(),
+                TokenType::Fun => self.parse_fun_decl(),
                 _ => self.parse_stmt(),
             })
     }
@@ -99,6 +106,54 @@ impl Parser {
         };
 
         Ok(Stmt::VarDecl(ident, initializer))
+    }
+
+    fn parse_fun_decl(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenType::Fun, ParseErrorKind::ExpectFun)?;
+
+        let ident = self
+            .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
+            .lexeme;
+
+        self.expect(TokenType::LeftParen, ParseErrorKind::ExpectLeftParen)?;
+
+        let mut params = Vec::new();
+        if !matches!(
+            self.peek(),
+            Some(Token {
+                ttype: TokenType::RightParen,
+                ..
+            })
+        ) {
+            loop {
+                if params.len() >= 255 {
+                    return Err(self.error(ParseErrorKind::TooManyParams));
+                }
+
+                let param = self
+                    .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
+                    .lexeme;
+                params.push(param);
+
+                if let Some(Token {
+                    ttype: TokenType::Comma,
+                    ..
+                }) = self.peek()
+                {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
+
+        let Stmt::Block(body) = self.parse_block()? else {
+            unreachable!()
+        };
+
+        Ok(Stmt::FunDecl(ident, params, body))
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -207,28 +262,30 @@ impl Parser {
                     let body = self.parse_stmt()?;
                     Ok(Stmt::While(cond, Box::new(body)))
                 }
-                TokenType::LeftBrace => {
-                    self.advance();
-
-                    let mut stmts = Vec::new();
-                    while let Some(t) = self.peek() {
-                        match t.ttype {
-                            TokenType::RightBrace => {
-                                self.advance();
-
-                                return Ok(Stmt::Block(stmts));
-                            }
-                            TokenType::Eof => break,
-                            _ => {
-                                let stmt = self.parse_declaration()?;
-                                stmts.push(stmt);
-                            }
-                        }
-                    }
-                    Err(self.error(ParseErrorKind::ExpectRightBrace))
-                }
+                TokenType::LeftBrace => self.parse_block(),
                 _ => self.parse_expr_stmt(),
             })
+    }
+
+    fn parse_block(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenType::LeftBrace, ParseErrorKind::ExpectLeftBrace)?;
+
+        let mut stmts = Vec::new();
+        while let Some(t) = self.peek() {
+            match t.ttype {
+                TokenType::RightBrace => {
+                    self.advance();
+
+                    return Ok(Stmt::Block(stmts));
+                }
+                TokenType::Eof => break,
+                _ => {
+                    let stmt = self.parse_declaration()?;
+                    stmts.push(stmt);
+                }
+            }
+        }
+        Err(self.error(ParseErrorKind::ExpectRightBrace))
     }
 
     fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
