@@ -1,4 +1,4 @@
-use crate::expr::Expr;
+use crate::{expr::Expr, token::Token};
 
 #[derive(Clone)]
 pub enum Stmt {
@@ -9,4 +9,5 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     VarDecl(String, Option<Expr>),
     FunDecl(String, Vec<String>, Vec<Stmt>),
+    Return(Token, Option<Expr>),
 }

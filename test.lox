@@ -1,2 +1,2 @@
-fun bar() { print 10; }
-bar();
+fun foo() { return 10; }
+print foo();

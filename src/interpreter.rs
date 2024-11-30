@@ -30,6 +30,8 @@ pub enum RuntimeErrorKind {
     NotCallable,
     #[error("Expected {0} arguments but got {1}.")]
     WrongArity(u8, u8),
+    #[error("Return a value to the caller - nothing is wrong")]
+    Return(Option<Value>),
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -87,6 +89,19 @@ impl Display for Value {
             Value::Bool(b) => write!(f, "{b}"),
             Value::Nil => write!(f, "nil"),
             Value::Callable(callable) => write!(f, "<fn {}>", callable.name()),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Nil, Value::Nil) => true,
+            (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(a, b),
+            _ => false,
         }
     }
 }
@@ -401,7 +416,16 @@ impl Interpreter {
                             RuntimeErrorKind::WrongArity(expected_len, actual_len),
                         ))
                     } else {
-                        callable.call(self, &args)
+                        let result = callable.call(self, &args);
+                        if let Err(RuntimeError {
+                            source: RuntimeErrorKind::Return(value),
+                            ..
+                        }) = result
+                        {
+                            Ok(value.unwrap_or(Value::Nil))
+                        } else {
+                            result
+                        }
                     }
                 } else {
                     Err(RuntimeError::new(
@@ -459,8 +483,20 @@ impl Interpreter {
                 }
                 Stmt::Block(stmts) => {
                     self.env.push_scope_block();
-                    self.interpret(stmts)?;
+                    let result = self.interpret(stmts);
                     self.env.pop_scope();
+                    result?
+                }
+                Stmt::Return(keyword, expr) => {
+                    let value = if let Some(e) = expr {
+                        Some(self.eval(e)?)
+                    } else {
+                        None
+                    };
+                    return Err(RuntimeError::new(
+                        keyword.clone(),
+                        RuntimeErrorKind::Return(value),
+                    ));
                 }
             }
         }
@@ -489,10 +525,10 @@ impl Callable for FunCallable {
             interpreter.env.define(param.clone(), Some(arg.clone()));
         }
 
-        interpreter.interpret(&self.body)?;
+        let result = interpreter.interpret(&self.body);
 
         interpreter.env.pop_scope();
 
-        Ok(Value::Nil)
+        result.map(|_| Value::Nil)
     }
 }

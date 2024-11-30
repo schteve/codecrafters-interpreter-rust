@@ -253,6 +253,25 @@ impl Parser {
                     self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
                     Ok(Stmt::Print(expr))
                 }
+                TokenType::Return => {
+                    let keyword = self.advance().unwrap();
+                    let mut expr = None;
+                    if !matches!(
+                        self.peek(),
+                        Some(Token {
+                            ttype: TokenType::Semicolon,
+                            ..
+                        })
+                    ) {
+                        expr = Some(
+                            self.parse_expr()
+                                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?,
+                        );
+                    }
+
+                    self.expect(TokenType::Semicolon, ParseErrorKind::ExpectSemicolon)?;
+                    Ok(Stmt::Return(keyword, expr))
+                }
                 TokenType::While => {
                     self.advance();
 
