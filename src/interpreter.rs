@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fmt::{Debug, Display},
     mem,
@@ -119,12 +120,12 @@ impl Debug for dyn Callable {
 }
 
 struct Scope {
-    parent: Option<usize>,
+    parent: Option<Rc<RefCell<Scope>>>,
     vars: HashMap<String, Value>,
 }
 
 impl Scope {
-    fn new(parent: Option<usize>) -> Self {
+    fn new(parent: Option<Rc<RefCell<Scope>>>) -> Self {
         Self {
             parent,
             vars: HashMap::new(),
@@ -133,64 +134,42 @@ impl Scope {
 }
 
 struct Environment {
-    scopes: Vec<Scope>,
+    curr_scope: Rc<RefCell<Scope>>,
 }
 
 impl Environment {
     pub fn new() -> Self {
-        let globals = Scope::new(None);
+        let globals = Rc::new(RefCell::new(Scope::new(None)));
         Self {
-            scopes: vec![globals],
+            curr_scope: globals,
         }
     }
 
     fn define(&mut self, name: String, value: Option<Value>) {
         let value = value.unwrap_or(Value::Nil);
-        self.scopes
-            .last_mut()
-            .expect("Globals exist")
-            .vars
-            .insert(name, value);
+        self.curr_scope.borrow_mut().vars.insert(name, value);
     }
 
     fn get(&self, name: &str) -> Option<Value> {
-        let mut scope = self.scopes.last();
+        let mut scope = Some(self.curr_scope.clone());
         while let Some(s) = scope {
-            if let Some(val) = s.vars.get(name) {
+            if let Some(val) = s.borrow().vars.get(name) {
                 return Some(val.clone());
             }
-            scope = s.parent.and_then(|p| self.scopes.get(p));
+            scope = s.borrow().parent.clone();
         }
         None
     }
 
     fn set(&mut self, name: &str, value: Value) -> Option<Value> {
-        let mut scope = self.scopes.last_mut();
+        let mut scope = Some(self.curr_scope.clone());
         while let Some(s) = scope {
-            if let Some(val) = s.vars.get_mut(name) {
+            if let Some(val) = s.borrow_mut().vars.get_mut(name) {
                 return Some(mem::replace(val, value));
             }
-            scope = s.parent.and_then(|p| self.scopes.get_mut(p));
+            scope = s.borrow_mut().parent.clone();
         }
         None
-    }
-
-    fn push_scope_block(&mut self) {
-        assert!(!self.scopes.is_empty());
-        let curr_idx = self.scopes.len() - 1;
-        let new_scope = Scope::new(Some(curr_idx));
-        self.scopes.push(new_scope);
-    }
-
-    fn push_scope_fun(&mut self) {
-        assert!(!self.scopes.is_empty());
-        let fun_scope = Scope::new(Some(0));
-        self.scopes.push(fun_scope);
-    }
-
-    fn pop_scope(&mut self) {
-        self.scopes.pop();
-        assert!(!self.scopes.is_empty());
     }
 }
 
@@ -478,13 +457,16 @@ impl Interpreter {
                         name: name.clone(),
                         params: params.clone(),
                         body: body.clone(),
+                        parent_scope: self.env.curr_scope.clone(),
                     }));
                     self.env.define(name.clone(), Some(value));
                 }
                 Stmt::Block(stmts) => {
-                    self.env.push_scope_block();
+                    let curr_scope = self.env.curr_scope.clone();
+                    let new_scope = Scope::new(Some(self.env.curr_scope.clone()));
+                    self.env.curr_scope = Rc::new(RefCell::new(new_scope));
                     let result = self.interpret(stmts);
-                    self.env.pop_scope();
+                    self.env.curr_scope = curr_scope;
                     result?
                 }
                 Stmt::Return(keyword, expr) => {
@@ -508,6 +490,7 @@ struct FunCallable {
     name: String,
     params: Vec<String>,
     body: Vec<Stmt>,
+    parent_scope: Rc<RefCell<Scope>>,
 }
 
 impl Callable for FunCallable {
@@ -520,14 +503,17 @@ impl Callable for FunCallable {
     }
 
     fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, RuntimeError> {
-        interpreter.env.push_scope_fun();
+        let curr_scope = interpreter.env.curr_scope.clone();
+        let new_scope = Scope::new(Some(self.parent_scope.clone()));
+        interpreter.env.curr_scope = Rc::new(RefCell::new(new_scope));
+
         for (param, arg) in self.params.iter().zip(args) {
             interpreter.env.define(param.clone(), Some(arg.clone()));
         }
 
         let result = interpreter.interpret(&self.body);
 
-        interpreter.env.pop_scope();
+        interpreter.env.curr_scope = curr_scope;
 
         result.map(|_| Value::Nil)
     }
