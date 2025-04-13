@@ -5,13 +5,15 @@ use thiserror::Error;
 use crate::{
     expr::{Binary, Expr, ExprKind, Unary},
     stmt::Stmt,
-    token::Token,
+    token::{Token, TokenType},
 };
 
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum ResolverErrorKind {
     #[error("Can't read local variable '{0}' in its own initializer.")]
     VariableSelfAccess(String),
+    #[error("Already a variable named '{0}' in this scope.")]
+    VariableRedeclaration(String),
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -80,14 +82,14 @@ impl Resolver {
                 self.resolve_stmt(body.as_mut())?;
             }
             Stmt::VarDecl(name, initializer) => {
-                self.declare(name.clone());
+                self.declare(name.clone())?;
                 if let Some(init_expr) = initializer {
                     self.resolve_expr(init_expr)?;
                 }
                 self.define(name.clone());
             }
             Stmt::FunDecl(name, params, body) => {
-                self.declare(name.clone());
+                self.declare(name.clone())?;
                 self.define(name.clone());
                 self.resolve_fn(params, body)?;
             }
@@ -138,7 +140,15 @@ impl Resolver {
                 self.resolve_expr(right.as_mut())?;
             }
             ExprKind::Variable(binding) => {
-                if self.scopes.len() > 1 && self.scopes.last().expect("Some scope must exist").idents.get(&binding.name) == Some(&false) {
+                if self.scopes.len() > 1 // Only error on local scope
+                    && self
+                        .scopes
+                        .last()
+                        .expect("Some scope must exist")
+                        .idents
+                        .get(&binding.name)
+                        == Some(&false)
+                {
                     return Err(ResolverError::new(
                         expr.token.clone(),
                         ResolverErrorKind::VariableSelfAccess(binding.name.clone()),
@@ -173,7 +183,7 @@ impl Resolver {
     fn resolve_fn(&mut self, params: &[String], body: &mut [Stmt]) -> Result<(), ResolverError> {
         self.scope_begin();
         for param in params {
-            self.declare(param.clone());
+            self.declare(param.clone())?;
             self.define(param.clone());
         }
         self.resolve(body)?;
@@ -191,13 +201,26 @@ impl Resolver {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, name: String) {
+    fn declare(&mut self, name: String) -> Result<(), ResolverError> {
         let idents = &mut self
             .scopes
             .last_mut()
             .expect("Some scope must exist")
             .idents;
-        idents.insert(name, false);
+
+        let prev = idents.insert(name.clone(), false);
+        if self.scopes.len() > 1 && prev.is_some() {
+            // Only error on local scope
+            return Err(ResolverError::new(
+                Token {
+                    ttype: TokenType::Eof,
+                    lexeme: String::new(),
+                    line: 0,
+                }, // There should be an actual token for this, but not all statements have one. Refactor?
+                ResolverErrorKind::VariableRedeclaration(name.clone()),
+            ));
+        }
+        Ok(())
     }
 
     fn define(&mut self, name: String) {

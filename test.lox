@@ -1,13 +1,4 @@
-var variable = "global";
-
 {
-  fun f() {
-    print variable;
-  }
-
-  f();
-
-  var variable = "local";
-
-  f();
+  var a = "value";
+  var a = "other";
 }
