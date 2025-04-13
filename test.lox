@@ -1,4 +1,5 @@
-{
-  var a = "value";
-  var a = "other";
+fun foo() {
+  return "at function scope is ok";
 }
+
+return;

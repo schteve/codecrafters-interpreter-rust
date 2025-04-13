@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
 use thiserror::Error;
 
@@ -14,6 +14,8 @@ pub enum ResolverErrorKind {
     VariableSelfAccess(String),
     #[error("Already a variable named '{0}' in this scope.")]
     VariableRedeclaration(String),
+    #[error("Can't return from top-level code.")]
+    ReturnTopLevel,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -44,14 +46,22 @@ impl Scope {
     }
 }
 
+#[derive(Eq, PartialEq)]
+enum FnType {
+    None,
+    Function,
+}
+
 pub struct Resolver {
     scopes: Vec<Scope>,
+    curr_fn: FnType,
 }
 
 impl Resolver {
     pub fn new() -> Self {
         Self {
             scopes: vec![Scope::new()],
+            curr_fn: FnType::None,
         }
     }
 
@@ -91,14 +101,21 @@ impl Resolver {
             Stmt::FunDecl(name, params, body) => {
                 self.declare(name.clone())?;
                 self.define(name.clone());
-                self.resolve_fn(params, body)?;
+                self.resolve_fn(params, body, FnType::Function)?;
             }
             Stmt::Block(stmts) => {
                 self.scope_begin();
                 self.resolve(stmts)?;
                 self.scope_end();
             }
-            Stmt::Return(_keyword, expr) => {
+            Stmt::Return(keyword, expr) => {
+                if self.curr_fn == FnType::None {
+                    return Err(ResolverError::new(
+                        keyword.clone(),
+                        ResolverErrorKind::ReturnTopLevel,
+                    ));
+                }
+
                 if let Some(e) = expr {
                     self.resolve_expr(e)?;
                 }
@@ -180,7 +197,15 @@ impl Resolver {
         None
     }
 
-    fn resolve_fn(&mut self, params: &[String], body: &mut [Stmt]) -> Result<(), ResolverError> {
+    fn resolve_fn(
+        &mut self,
+        params: &[String],
+        body: &mut [Stmt],
+        this_fn: FnType,
+    ) -> Result<(), ResolverError> {
+        let mut enclosing_fn = this_fn;
+        mem::swap(&mut self.curr_fn, &mut enclosing_fn);
+
         self.scope_begin();
         for param in params {
             self.declare(param.clone())?;
@@ -188,6 +213,8 @@ impl Resolver {
         }
         self.resolve(body)?;
         self.scope_end();
+
+        self.curr_fn = enclosing_fn;
 
         Ok(())
     }
