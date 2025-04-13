@@ -10,7 +10,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    expr::{Binary, Expr, ExprKind, Literal, Unary},
+    expr::{Binary, Binding, Expr, ExprKind, Literal, Unary},
     native,
     stmt::Stmt,
     token::Token,
@@ -150,26 +150,43 @@ impl Environment {
         self.curr_scope.borrow_mut().vars.insert(name, value);
     }
 
-    fn get(&self, name: &str) -> Option<Value> {
-        let mut scope = Some(self.curr_scope.clone());
-        while let Some(s) = scope {
-            if let Some(val) = s.borrow().vars.get(name) {
-                return Some(val.clone());
+    fn ancestor(&self, depth: Option<u32>) -> Rc<RefCell<Scope>> {
+        if let Some(d) = depth {
+            // Local
+            let mut curr = self.curr_scope.clone();
+            for _ in 0..d {
+                let ancestor = curr
+                    .borrow()
+                    .parent
+                    .clone()
+                    .expect("Environment must be deep enough");
+                curr = ancestor;
             }
-            scope = s.borrow().parent.clone();
+            curr
+        } else {
+            // Global
+            let mut curr = self.curr_scope.clone();
+            loop {
+                let Some(ancestor) = curr.borrow().parent.clone() else {
+                    break;
+                };
+                curr = ancestor;
+            }
+            curr
         }
-        None
     }
 
-    fn set(&mut self, name: &str, value: Value) -> Option<Value> {
-        let mut scope = Some(self.curr_scope.clone());
-        while let Some(s) = scope {
-            if let Some(val) = s.borrow_mut().vars.get_mut(name) {
-                return Some(mem::replace(val, value));
-            }
-            scope = s.borrow_mut().parent.clone();
-        }
-        None
+    fn get(&self, binding: &Binding) -> Option<Value> {
+        let scope = self.ancestor(binding.depth);
+        let s = scope.borrow();
+        s.vars.get(&binding.name).cloned()
+    }
+
+    fn set(&mut self, binding: &Binding, value: Value) -> Option<Value> {
+        let scope = self.ancestor(binding.depth);
+        let mut s = scope.borrow_mut();
+        let existing = s.vars.get_mut(&binding.name).expect("Value must be set");
+        Some(mem::replace(existing, value))
     }
 }
 
@@ -363,19 +380,19 @@ impl Interpreter {
                     }
                 }
             },
-            ExprKind::Variable(name) => self.env.get(name).ok_or_else(|| {
+            ExprKind::Variable(binding) => self.env.get(binding).ok_or_else(|| {
                 RuntimeError::new(
                     expr.token.clone(),
-                    RuntimeErrorKind::UndefinedVariable(name.clone()),
+                    RuntimeErrorKind::UndefinedVariable(binding.name.clone()),
                 )
             }),
-            ExprKind::Assign(name, value) => {
+            ExprKind::Assign(binding, value) => {
                 let value = self.eval(value)?;
-                match self.env.set(name, value.clone()) {
+                match self.env.set(binding, value.clone()) {
                     Some(_) => Ok(value),
                     None => Err(RuntimeError::new(
                         expr.token.clone(),
-                        RuntimeErrorKind::UndefinedVariable(name.clone()),
+                        RuntimeErrorKind::UndefinedVariable(binding.name.clone()),
                     )),
                 }
             }

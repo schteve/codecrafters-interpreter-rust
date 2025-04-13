@@ -1,6 +1,12 @@
 use crate::token::Token;
 
 #[derive(Clone)]
+pub struct Binding {
+    pub name: String,
+    pub depth: Option<u32>,
+}
+
+#[derive(Clone)]
 pub enum Literal {
     Number(f64),
     String(String),
@@ -36,8 +42,8 @@ pub enum ExprKind {
     Grouping(Box<Expr>),
     Unary(Unary),
     Binary(Binary),
-    Variable(String),
-    Assign(String, Box<Expr>),
+    Variable(Binding),
+    Assign(Binding, Box<Expr>),
     Call(Box<Expr>, Vec<Expr>),
 }
 
@@ -163,9 +169,9 @@ impl Expr {
                     print!(")");
                 }
             },
-            ExprKind::Variable(name) => print!("(var {name})"),
-            ExprKind::Assign(name, value) => {
-                print!("({name} = ");
+            ExprKind::Variable(binding) => print!("(var {})", binding.name),
+            ExprKind::Assign(binding, value) => {
+                print!("({} = ", binding.name);
                 value.print();
                 print!(")");
             }

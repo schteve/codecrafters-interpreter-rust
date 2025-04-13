@@ -2,7 +2,7 @@ use anyhow::Result;
 use thiserror::Error;
 
 use crate::{
-    expr::{Binary, Expr, ExprKind, Literal, Unary},
+    expr::{Binary, Binding, Expr, ExprKind, Literal, Unary},
     stmt::Stmt,
     token::{Token, TokenType},
 };
@@ -328,9 +328,9 @@ impl Parser {
 
                     let value = self.parse_assignment()?;
                     match expr.kind {
-                        ExprKind::Variable(name) => Ok(Expr::new(
+                        ExprKind::Variable(binding) => Ok(Expr::new(
                             expr.token,
-                            ExprKind::Assign(name, Box::new(value)),
+                            ExprKind::Assign(binding, Box::new(value)),
                         )),
                         _ => Err(self.error(ParseErrorKind::InvalidAssignment)),
                     }
@@ -591,7 +591,8 @@ impl Parser {
                     self.advance();
 
                     let name = t.lexeme.clone();
-                    let kind = ExprKind::Variable(name);
+                    let binding = Binding { name, depth: None };
+                    let kind = ExprKind::Variable(binding);
                     Ok(Expr::new(t, kind))
                 }
                 _ => Err(self.error(ParseErrorKind::NoValidExpr)),

@@ -6,6 +6,7 @@ mod expr;
 mod interpreter;
 mod native;
 mod parser;
+mod resolver;
 mod scanner;
 mod stmt;
 mod token;
@@ -111,7 +112,14 @@ fn main() -> ExitCode {
                 eprintln!("{e}");
                 return ExitCode::from(65);
             }
-            let ast = ast.unwrap();
+            let mut ast = ast.unwrap();
+
+            let mut resolver = resolver::Resolver::new();
+            let resolved = resolver.resolve(&mut ast);
+            if let Err(e) = resolved {
+                eprintln!("{e}");
+                return ExitCode::from(65);
+            }
 
             let mut interpreter = Interpreter::new();
             let result = interpreter.interpret(&ast);
