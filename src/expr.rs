@@ -1,12 +1,12 @@
 use crate::token::Token;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Binding {
     pub name: String,
     pub depth: Option<u32>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Literal {
     Number(f64),
     String(String),
@@ -14,13 +14,13 @@ pub enum Literal {
     Nil,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Unary {
     Negate(Box<Expr>),
     Not(Box<Expr>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Binary {
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
@@ -36,7 +36,7 @@ pub enum Binary {
     And(Box<Expr>, Box<Expr>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ExprKind {
     Literal(Literal),
     Grouping(Box<Expr>),
@@ -47,7 +47,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Expr {
     pub token: Token,
     pub kind: ExprKind,

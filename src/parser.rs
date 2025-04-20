@@ -29,10 +29,10 @@ pub enum ParseErrorKind {
     ExpectLeftBrace,
     #[error("Expect right brace.")]
     ExpectRightBrace,
+    #[error("Expect Class declaration.")]
+    ExpectClass,
     #[error("Expect Var declaration.")]
     ExpectVar,
-    #[error("Expect Fun declaration.")]
-    ExpectFun,
     #[error("Can't have more than 255 parameters.")]
     TooManyParams,
 }
@@ -74,10 +74,42 @@ impl Parser {
         self.peek()
             .ok_or_else(|| self.error(ParseErrorKind::NoValidExpr))
             .and_then(|t| match &t.ttype {
+                TokenType::Class => self.parse_class_decl(),
                 TokenType::Var => self.parse_var_decl(),
-                TokenType::Fun => self.parse_fun_decl(),
+                TokenType::Fun => {
+                    self.advance();
+                    self.parse_fun_decl()
+                }
                 _ => self.parse_stmt(),
             })
+    }
+
+    fn parse_class_decl(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenType::Class, ParseErrorKind::ExpectClass)?;
+
+        let ident = self
+            .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
+            .lexeme;
+
+        self.expect(TokenType::LeftBrace, ParseErrorKind::ExpectLeftBrace)?;
+
+        let mut methods = Vec::new();
+        while let Some(t) = self.peek() {
+            match t.ttype {
+                TokenType::RightBrace => {
+                    break;
+                }
+                TokenType::Eof => break,
+                _ => {
+                    let function = self.parse_fun_decl()?;
+                    methods.push(function);
+                }
+            }
+        }
+
+        self.expect(TokenType::RightBrace, ParseErrorKind::ExpectRightBrace)?;
+
+        Ok(Stmt::ClassDecl(ident, methods))
     }
 
     fn parse_var_decl(&mut self) -> Result<Stmt, ParseError> {
@@ -109,8 +141,6 @@ impl Parser {
     }
 
     fn parse_fun_decl(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(TokenType::Fun, ParseErrorKind::ExpectFun)?;
-
         let ident = self
             .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
             .lexeme;

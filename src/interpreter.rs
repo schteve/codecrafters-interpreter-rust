@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     fmt::{Debug, Display},
-    mem,
+    mem, ptr,
     rc::Rc,
     slice,
 };
@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::{
     expr::{Binary, Binding, Expr, ExprKind, Literal, Unary},
-    native,
+    native::{self, NativeFunction},
     stmt::Stmt,
     token::Token,
 };
@@ -57,7 +57,10 @@ pub enum Value {
     String(String),
     Bool(bool),
     Nil,
-    Callable(Rc<dyn Callable>),
+    NativeFunction(NativeFunction),
+    Function(Rc<Function>),
+    Class(Rc<Class>),
+    Instance(Instance),
 }
 
 impl Value {
@@ -67,17 +70,10 @@ impl Value {
             Value::String(_) => true,
             Value::Bool(b) => *b,
             Value::Nil => false,
-            Value::Callable(_) => true,
-        }
-    }
-
-    fn is_equal(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Number(left_n), Value::Number(right_n)) => left_n == right_n,
-            (Value::String(left_s), Value::String(right_s)) => left_s == right_s,
-            (Value::Bool(left_b), Value::Bool(right_b)) => left_b == right_b,
-            (Value::Nil, Value::Nil) => true,
-            _ => false,
+            Value::NativeFunction(_) => true,
+            Value::Function(_) => true,
+            Value::Class(_) => true,
+            Value::Instance(_) => true,
         }
     }
 }
@@ -89,7 +85,10 @@ impl Display for Value {
             Value::String(s) => write!(f, "{s}"),
             Value::Bool(b) => write!(f, "{b}"),
             Value::Nil => write!(f, "nil"),
-            Value::Callable(callable) => write!(f, "<fn {}>", callable.name()),
+            Value::NativeFunction(nf) => write!(f, "{nf}"),
+            Value::Function(func) => write!(f, "{func}"),
+            Value::Class(c) => write!(f, "{c}"),
+            Value::Instance(inst) => write!(f, "{}", inst),
         }
     }
 }
@@ -101,7 +100,14 @@ impl PartialEq for Value {
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Nil, Value::Nil) => true,
-            (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(a, b),
+            (Value::NativeFunction(a), Value::NativeFunction(b)) => {
+                ptr::addr_eq(ptr::addr_of!(a), ptr::addr_of!(b))
+            }
+            (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
+            (Value::Class(a), Value::Class(b)) => Rc::ptr_eq(a, b),
+            (Value::Instance(a), Value::Instance(b)) => {
+                ptr::addr_eq(ptr::addr_of!(a), ptr::addr_of!(b))
+            }
             _ => false,
         }
     }
@@ -119,6 +125,7 @@ impl Debug for dyn Callable {
     }
 }
 
+#[derive(Clone, Debug)]
 struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
     vars: HashMap<String, Value>,
@@ -198,10 +205,10 @@ impl Interpreter {
     pub fn new() -> Self {
         let mut env = Environment::new();
 
-        let nat_fun = native::NativeClock {};
+        let nat_fun = native::NATIVE_CLOCK;
         env.define(
             nat_fun.name().to_owned(),
-            Some(Value::Callable(Rc::new(nat_fun))),
+            Some(Value::NativeFunction(nat_fun)),
         );
 
         Self { env }
@@ -353,15 +360,15 @@ impl Interpreter {
                     let left_value = self.eval(left)?;
                     let right_value = self.eval(right)?;
 
-                    let eq = left_value.is_equal(&right_value);
+                    let eq = left_value == right_value;
                     Ok(Value::Bool(eq))
                 }
                 Binary::NotEqual(left, right) => {
                     let left_value = self.eval(left)?;
                     let right_value = self.eval(right)?;
 
-                    let eq = left_value.is_equal(&right_value);
-                    Ok(Value::Bool(!eq))
+                    let neq = left_value != right_value;
+                    Ok(Value::Bool(neq))
                 }
                 Binary::Or(left, right) => {
                     let left_value = self.eval(left)?;
@@ -398,7 +405,13 @@ impl Interpreter {
             }
             ExprKind::Call(callee, arguments) => {
                 let callee_value = self.eval(callee)?;
-                if let Value::Callable(callable) = callee_value {
+                let callable = match &callee_value {
+                    Value::NativeFunction(nat_func) => Some(nat_func as &dyn Callable),
+                    Value::Function(function) => Some(function.as_ref() as &dyn Callable),
+                    Value::Class(class) => Some(class.as_ref() as &dyn Callable),
+                    _ => None,
+                };
+                if let Some(callable) = callable {
                     let args = arguments
                         .iter()
                         .map(|arg| self.eval(arg))
@@ -461,6 +474,10 @@ impl Interpreter {
                         self.interpret(body_slice)?;
                     }
                 }
+                Stmt::ClassDecl(name, _methods) => {
+                    let value: Value = Value::Class(Rc::new(Class { name: name.clone() }));
+                    self.env.define(name.clone(), Some(value));
+                }
                 Stmt::VarDecl(name, initializer) => {
                     let value = if let Some(expr) = initializer {
                         Some(self.eval(expr)?)
@@ -470,7 +487,7 @@ impl Interpreter {
                     self.env.define(name.clone(), value);
                 }
                 Stmt::FunDecl(name, params, body) => {
-                    let value = Value::Callable(Rc::new(FunCallable {
+                    let value = Value::Function(Rc::new(Function {
                         name: name.clone(),
                         params: params.clone(),
                         body: body.clone(),
@@ -503,14 +520,15 @@ impl Interpreter {
     }
 }
 
-struct FunCallable {
+#[derive(Clone, Debug)]
+pub struct Function {
     name: String,
     params: Vec<String>,
     body: Vec<Stmt>,
     parent_scope: Rc<RefCell<Scope>>,
 }
 
-impl Callable for FunCallable {
+impl Callable for Function {
     fn name(&self) -> &str {
         &self.name
     }
@@ -533,5 +551,50 @@ impl Callable for FunCallable {
         interpreter.env.curr_scope = curr_scope;
 
         result.map(|_| Value::Nil)
+    }
+}
+
+impl Display for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<fn {}>", self.name())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Class {
+    name: String,
+}
+
+impl Callable for Class {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn arity(&self) -> u8 {
+        0
+    }
+
+    fn call(&self, _interpreter: &mut Interpreter, _args: &[Value]) -> Result<Value, RuntimeError> {
+        let inst = Instance {
+            class: self.clone(),
+        };
+        Ok(Value::Instance(inst))
+    }
+}
+
+impl Display for Class {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Instance {
+    class: Class,
+}
+
+impl Display for Instance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} instance", self.class.name)
     }
 }

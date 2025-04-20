@@ -91,6 +91,10 @@ impl Resolver {
                 self.resolve_expr(cond)?;
                 self.resolve_stmt(body.as_mut())?;
             }
+            Stmt::ClassDecl(name, _methods) => {
+                self.declare(name.clone())?;
+                self.define(name.clone());
+            }
             Stmt::VarDecl(name, initializer) => {
                 self.declare(name.clone())?;
                 if let Some(init_expr) = initializer {
