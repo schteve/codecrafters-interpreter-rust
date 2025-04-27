@@ -33,6 +33,10 @@ pub enum RuntimeErrorKind {
     WrongArity(u8, u8),
     #[error("Return a value to the caller - nothing is wrong")]
     Return(Option<Value>),
+    #[error("Only instances have properties.")]
+    NotAnInstance,
+    #[error("Undefined property {0}.")]
+    UndefinedProperty(String),
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -60,7 +64,7 @@ pub enum Value {
     NativeFunction(NativeFunction),
     Function(Rc<Function>),
     Class(Rc<Class>),
-    Instance(Instance),
+    Instance(Rc<RefCell<Instance>>),
 }
 
 impl Value {
@@ -88,7 +92,7 @@ impl Display for Value {
             Value::NativeFunction(nf) => write!(f, "{nf}"),
             Value::Function(func) => write!(f, "{func}"),
             Value::Class(c) => write!(f, "{c}"),
-            Value::Instance(inst) => write!(f, "{}", inst),
+            Value::Instance(inst) => write!(f, "{}", inst.borrow()),
         }
     }
 }
@@ -443,6 +447,31 @@ impl Interpreter {
                     ))
                 }
             }
+            ExprKind::Get(obj, property_name) => {
+                let obj_value = self.eval(obj)?;
+                if let Value::Instance(inst) = obj_value {
+                    inst.borrow().get(property_name)
+                } else {
+                    Err(RuntimeError::new(
+                        obj.token.clone(),
+                        RuntimeErrorKind::NotAnInstance,
+                    ))
+                }
+            }
+            ExprKind::Set(obj, property_name, value) => {
+                let obj_value = self.eval(obj)?;
+                if let Value::Instance(inst) = obj_value {
+                    let value_value = self.eval(value)?;
+                    inst.borrow_mut()
+                        .set(property_name.clone(), value_value.clone());
+                    Ok(value_value)
+                } else {
+                    Err(RuntimeError::new(
+                        obj.token.clone(),
+                        RuntimeErrorKind::NotAnInstance,
+                    ))
+                }
+            }
         }
     }
 
@@ -575,10 +604,8 @@ impl Callable for Class {
     }
 
     fn call(&self, _interpreter: &mut Interpreter, _args: &[Value]) -> Result<Value, RuntimeError> {
-        let inst = Instance {
-            class: self.clone(),
-        };
-        Ok(Value::Instance(inst))
+        let inst = Instance::new(self.clone());
+        Ok(Value::Instance(Rc::new(RefCell::new(inst))))
     }
 }
 
@@ -591,6 +618,30 @@ impl Display for Class {
 #[derive(Clone, Debug)]
 pub struct Instance {
     class: Class,
+    fields: HashMap<String, Value>,
+}
+
+impl Instance {
+    fn new(class: Class) -> Self {
+        Self {
+            class,
+            fields: HashMap::new(),
+        }
+    }
+
+    fn get(&self, property_name: &str) -> Result<Value, RuntimeError> {
+        self.fields
+            .get(property_name)
+            .cloned()
+            .ok_or(RuntimeError::new(
+                Token::empty(),
+                RuntimeErrorKind::UndefinedProperty(property_name.to_owned()),
+            ))
+    }
+
+    fn set(&mut self, property_name: String, value: Value) {
+        self.fields.insert(property_name, value);
+    }
 }
 
 impl Display for Instance {

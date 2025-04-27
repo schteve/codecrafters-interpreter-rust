@@ -107,6 +107,16 @@ pub struct Token {
     pub line: usize,
 }
 
+impl Token {
+    pub fn empty() -> Self {
+        Self {
+            ttype: TokenType::Eof,
+            lexeme: String::new(),
+            line: 0,
+        }
+    }
+}
+
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {} ", self.ttype, self.lexeme)?;

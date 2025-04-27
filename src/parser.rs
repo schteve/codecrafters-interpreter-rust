@@ -362,6 +362,10 @@ impl Parser {
                             expr.token,
                             ExprKind::Assign(binding, Box::new(value)),
                         )),
+                        ExprKind::Get(obj, property_name) => Ok(Expr::new(
+                            expr.token,
+                            ExprKind::Set(obj, property_name, Box::new(value)),
+                        )),
                         _ => Err(self.error(ParseErrorKind::InvalidAssignment)),
                     }
                 }
@@ -533,43 +537,52 @@ impl Parser {
     fn parse_call(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.parse_primary()?;
 
-        while let Some(Token {
-            ttype: TokenType::LeftParen,
-            ..
-        }) = self.peek()
-        {
-            self.advance();
+        while let Some(next) = self.peek() {
+            match next.ttype {
+                TokenType::LeftParen => {
+                    self.advance();
 
-            let mut args = Vec::new();
+                    let mut args = Vec::new();
 
-            if !matches!(
-                self.peek(),
-                Some(Token {
-                    ttype: TokenType::RightParen,
-                    ..
-                })
-            ) {
-                loop {
-                    let arg_expr = self
-                        .parse_expr()
-                        .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
-                    args.push(arg_expr);
+                    if !matches!(
+                        self.peek(),
+                        Some(Token {
+                            ttype: TokenType::RightParen,
+                            ..
+                        })
+                    ) {
+                        loop {
+                            let arg_expr = self
+                                .parse_expr()
+                                .map_err(|_| self.error(ParseErrorKind::ExpectExpression))?;
+                            args.push(arg_expr);
 
-                    if let Some(Token {
-                        ttype: TokenType::Comma,
-                        ..
-                    }) = self.peek()
-                    {
-                        self.advance();
-                    } else {
-                        break;
+                            if let Some(Token {
+                                ttype: TokenType::Comma,
+                                ..
+                            }) = self.peek()
+                            {
+                                self.advance();
+                            } else {
+                                break;
+                            }
+                        }
                     }
-                }
-            }
 
-            let t = self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
-            let kind = ExprKind::Call(Box::new(expr), args);
-            expr = Expr::new(t, kind);
+                    let t = self.expect(TokenType::RightParen, ParseErrorKind::ExpectRightParen)?;
+                    let kind = ExprKind::Call(Box::new(expr), args);
+                    expr = Expr::new(t, kind);
+                }
+                TokenType::Dot => {
+                    self.advance();
+
+                    let t = self.expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?;
+                    let property_name = t.lexeme.clone();
+                    let kind = ExprKind::Get(Box::new(expr), property_name);
+                    expr = Expr::new(t, kind);
+                }
+                _ => break,
+            }
         }
 
         Ok(expr)

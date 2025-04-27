@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::{
     expr::{Binary, Expr, ExprKind, Unary},
     stmt::Stmt,
-    token::{Token, TokenType},
+    token::Token,
 };
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -188,6 +188,13 @@ impl Resolver {
                     self.resolve_expr(arg)?;
                 }
             }
+            ExprKind::Get(obj, _property_name) => {
+                self.resolve_expr(obj.as_mut())?;
+            }
+            ExprKind::Set(obj, _property_name, value) => {
+                self.resolve_expr(obj.as_mut())?;
+                self.resolve_expr(value.as_mut())?;
+            }
         }
         Ok(())
     }
@@ -243,11 +250,7 @@ impl Resolver {
         if self.scopes.len() > 1 && prev.is_some() {
             // Only error on local scope
             return Err(ResolverError::new(
-                Token {
-                    ttype: TokenType::Eof,
-                    lexeme: String::new(),
-                    line: 0,
-                }, // There should be an actual token for this, but not all statements have one. Refactor?
+                Token::empty(), // There should be an actual token for this, but not all statements have one. Refactor?
                 ResolverErrorKind::VariableRedeclaration(name.clone()),
             ));
         }

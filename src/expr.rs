@@ -45,6 +45,8 @@ pub enum ExprKind {
     Variable(Binding),
     Assign(Binding, Box<Expr>),
     Call(Box<Expr>, Vec<Expr>),
+    Get(Box<Expr>, String),
+    Set(Box<Expr>, String, Box<Expr>),
 }
 
 #[derive(Clone, Debug)]
@@ -184,6 +186,18 @@ impl Expr {
                     print!(",");
                 }
                 print!("))");
+            }
+            ExprKind::Get(obj, property_name) => {
+                print!("(get ");
+                obj.print();
+                print!(", {property_name})");
+            }
+            ExprKind::Set(obj, property_name, value) => {
+                print!("(set ");
+                obj.print();
+                print!(", {property_name}, ");
+                value.print();
+                print!(")");
             }
         }
     }
