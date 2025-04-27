@@ -503,8 +503,27 @@ impl Interpreter {
                         self.interpret(body_slice)?;
                     }
                 }
-                Stmt::ClassDecl(name, _methods) => {
-                    let value: Value = Value::Class(Rc::new(Class { name: name.clone() }));
+                Stmt::ClassDecl(name, methods) => {
+                    let mut method_map = HashMap::new();
+                    for method in methods {
+                        let Stmt::FunDecl(name, params, body) = method else {
+                            panic!("Found non-function declaration in method list");
+                        };
+
+                        let f = Function {
+                            name: name.clone(),
+                            params: params.clone(),
+                            body: body.clone(),
+                            parent_scope: self.env.curr_scope.clone(),
+                        };
+                        method_map.insert(name.clone(), f);
+                    }
+
+                    let class = Class {
+                        name: name.clone(),
+                        methods: method_map,
+                    };
+                    let value: Value = Value::Class(Rc::new(class));
                     self.env.define(name.clone(), Some(value));
                 }
                 Stmt::VarDecl(name, initializer) => {
@@ -592,6 +611,7 @@ impl Display for Function {
 #[derive(Clone, Debug)]
 pub struct Class {
     name: String,
+    methods: HashMap<String, Function>,
 }
 
 impl Callable for Class {
@@ -630,13 +650,17 @@ impl Instance {
     }
 
     fn get(&self, property_name: &str) -> Result<Value, RuntimeError> {
-        self.fields
-            .get(property_name)
-            .cloned()
-            .ok_or(RuntimeError::new(
+        if let Some(field) = self.fields.get(property_name) {
+            Ok(field.clone())
+        } else if let Some(method) = self.class.methods.get(property_name) {
+            let function = Value::Function(Rc::new(method.clone()));
+            Ok(function)
+        } else {
+            Err(RuntimeError::new(
                 Token::empty(),
                 RuntimeErrorKind::UndefinedProperty(property_name.to_owned()),
             ))
+        }
     }
 
     fn set(&mut self, property_name: String, value: Value) {

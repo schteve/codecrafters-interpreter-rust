@@ -50,6 +50,7 @@ impl Scope {
 enum FnType {
     None,
     Function,
+    Method,
 }
 
 pub struct Resolver {
@@ -91,9 +92,16 @@ impl Resolver {
                 self.resolve_expr(cond)?;
                 self.resolve_stmt(body.as_mut())?;
             }
-            Stmt::ClassDecl(name, _methods) => {
+            Stmt::ClassDecl(name, methods) => {
                 self.declare(name.clone())?;
                 self.define(name.clone());
+
+                for method in methods {
+                    let Stmt::FunDecl(_name, params, body) = method else {
+                        panic!("Found non-function declaration in method list");
+                    };
+                    self.resolve_fn(params, body, FnType::Method)?;
+                }
             }
             Stmt::VarDecl(name, initializer) => {
                 self.declare(name.clone())?;
