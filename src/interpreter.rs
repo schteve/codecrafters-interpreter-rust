@@ -622,12 +622,25 @@ impl Callable for Function {
 
         interpreter.env.curr_scope = curr_scope;
 
-        if self.is_initializer {
-            let s = self.parent_scope.borrow();
-            let this = s.vars.get("this").expect("'this' must exist'").clone();
-            Ok(this)
-        } else {
-            result.map(|_| Value::Nil)
+        match result {
+            Ok(()) => {
+                if self.is_initializer {
+                    let s = self.parent_scope.borrow();
+                    let this = s.vars.get("this").expect("'this' must exist'").clone();
+                    Ok(this)
+                } else {
+                    Ok(Value::Nil)
+                    // result.map(|_| Value::Nil)
+                }
+            }
+            Err(mut err) => {
+                if self.is_initializer && matches!(err.source, RuntimeErrorKind::Return(_)) {
+                    let s = self.parent_scope.borrow();
+                    let this = s.vars.get("this").expect("'this' must exist'").clone();
+                    err.source = RuntimeErrorKind::Return(Some(this));
+                }
+                Err(err)
+            }
         }
     }
 }

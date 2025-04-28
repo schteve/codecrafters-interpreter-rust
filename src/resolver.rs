@@ -18,6 +18,8 @@ pub enum ResolverErrorKind {
     ReturnTopLevel,
     #[error("Can't use 'this' outside of a class.")]
     ThisOutsideClass,
+    #[error("Can't return a value from an initializer.")]
+    ReturnValueInitializer,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -52,6 +54,7 @@ impl Scope {
 enum FnType {
     None,
     Function,
+    Initializer,
     Method,
 }
 
@@ -117,10 +120,15 @@ impl Resolver {
                     .insert(String::from("this"), true);
 
                 for method in methods {
-                    let Stmt::FunDecl(_name, params, body) = method else {
+                    let Stmt::FunDecl(name, params, body) = method else {
                         panic!("Found non-function declaration in method list");
                     };
-                    self.resolve_fn(params, body, FnType::Method)?;
+                    let fn_type = if name == "init" {
+                        FnType::Initializer
+                    } else {
+                        FnType::Method
+                    };
+                    self.resolve_fn(params, body, fn_type)?;
                 }
 
                 self.curr_class = enclosing_class;
@@ -149,6 +157,13 @@ impl Resolver {
                     return Err(ResolverError::new(
                         keyword.clone(),
                         ResolverErrorKind::ReturnTopLevel,
+                    ));
+                }
+
+                if self.curr_fn == FnType::Initializer && expr.is_some() {
+                    return Err(ResolverError::new(
+                        keyword.clone(),
+                        ResolverErrorKind::ReturnValueInitializer,
                     ));
                 }
 
