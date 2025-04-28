@@ -16,6 +16,8 @@ pub enum ResolverErrorKind {
     VariableRedeclaration(String),
     #[error("Can't return from top-level code.")]
     ReturnTopLevel,
+    #[error("Can't use 'this' outside of a class.")]
+    ThisOutsideClass,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -53,9 +55,16 @@ enum FnType {
     Method,
 }
 
+#[derive(Eq, PartialEq)]
+enum ClassType {
+    None,
+    Class,
+}
+
 pub struct Resolver {
     scopes: Vec<Scope>,
     curr_fn: FnType,
+    curr_class: ClassType,
 }
 
 impl Resolver {
@@ -63,6 +72,7 @@ impl Resolver {
         Self {
             scopes: vec![Scope::new()],
             curr_fn: FnType::None,
+            curr_class: ClassType::None,
         }
     }
 
@@ -93,6 +103,9 @@ impl Resolver {
                 self.resolve_stmt(body.as_mut())?;
             }
             Stmt::ClassDecl(name, methods) => {
+                let mut enclosing_class = ClassType::Class;
+                mem::swap(&mut self.curr_class, &mut enclosing_class);
+
                 self.declare(name.clone())?;
                 self.define(name.clone());
 
@@ -109,6 +122,8 @@ impl Resolver {
                     };
                     self.resolve_fn(params, body, FnType::Method)?;
                 }
+
+                self.curr_class = enclosing_class;
 
                 self.scope_end();
             }
@@ -213,6 +228,13 @@ impl Resolver {
                 self.resolve_expr(value.as_mut())?;
             }
             ExprKind::This(binding) => {
+                if self.curr_class == ClassType::None {
+                    return Err(ResolverError::new(
+                        expr.token.clone(),
+                        ResolverErrorKind::ThisOutsideClass,
+                    ));
+                }
+
                 binding.depth = self.resolve_local(&binding.name);
             }
         }
