@@ -47,6 +47,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Get(Box<Expr>, String),
     Set(Box<Expr>, String, Box<Expr>),
+    This(Binding),
 }
 
 #[derive(Clone, Debug)]
@@ -198,6 +199,9 @@ impl Expr {
                 print!(", {property_name}, ");
                 value.print();
                 print!(")");
+            }
+            ExprKind::This(binding) => {
+                print!("(this {})", binding.name);
             }
         }
     }

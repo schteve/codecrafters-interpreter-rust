@@ -638,6 +638,16 @@ impl Parser {
                     let kind = ExprKind::Variable(binding);
                     Ok(Expr::new(t, kind))
                 }
+                TokenType::This => {
+                    self.advance();
+
+                    let binding = Binding {
+                        name: t.lexeme.clone(),
+                        depth: None,
+                    };
+                    let kind = ExprKind::This(binding);
+                    Ok(Expr::new(t, kind))
+                }
                 _ => Err(self.error(ParseErrorKind::NoValidExpr)),
             })
     }

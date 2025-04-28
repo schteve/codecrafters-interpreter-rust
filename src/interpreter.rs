@@ -142,6 +142,10 @@ impl Scope {
             vars: HashMap::new(),
         }
     }
+
+    fn define(&mut self, name: String, value: Value) {
+        self.vars.insert(name, value);
+    }
 }
 
 struct Environment {
@@ -158,7 +162,7 @@ impl Environment {
 
     fn define(&mut self, name: String, value: Option<Value>) {
         let value = value.unwrap_or(Value::Nil);
-        self.curr_scope.borrow_mut().vars.insert(name, value);
+        self.curr_scope.borrow_mut().define(name, value);
     }
 
     fn ancestor(&self, depth: Option<u32>) -> Rc<RefCell<Scope>> {
@@ -450,7 +454,7 @@ impl Interpreter {
             ExprKind::Get(obj, property_name) => {
                 let obj_value = self.eval(obj)?;
                 if let Value::Instance(inst) = obj_value {
-                    inst.borrow().get(property_name)
+                    inst.get(property_name)
                 } else {
                     Err(RuntimeError::new(
                         obj.token.clone(),
@@ -460,10 +464,9 @@ impl Interpreter {
             }
             ExprKind::Set(obj, property_name, value) => {
                 let obj_value = self.eval(obj)?;
-                if let Value::Instance(inst) = obj_value {
+                if let Value::Instance(mut inst) = obj_value {
                     let value_value = self.eval(value)?;
-                    inst.borrow_mut()
-                        .set(property_name.clone(), value_value.clone());
+                    inst.set(property_name.clone(), value_value.clone());
                     Ok(value_value)
                 } else {
                     Err(RuntimeError::new(
@@ -472,6 +475,12 @@ impl Interpreter {
                     ))
                 }
             }
+            ExprKind::This(binding) => self.env.get(binding).ok_or_else(|| {
+                RuntimeError::new(
+                    expr.token.clone(),
+                    RuntimeErrorKind::UndefinedVariable(binding.name.clone()),
+                )
+            }),
         }
     }
 
@@ -648,13 +657,28 @@ impl Instance {
             fields: HashMap::new(),
         }
     }
+}
 
+// This is goofy but it lets us refer back to the correct instance without
+// passing it in as a parameter. Could also use a global registry of instances
+// and use UUID to look it up.
+trait HasProperty {
+    fn get(&self, property_name: &str) -> Result<Value, RuntimeError>;
+    fn set(&mut self, property_name: String, value: Value);
+}
+
+impl HasProperty for Rc<RefCell<Instance>> {
     fn get(&self, property_name: &str) -> Result<Value, RuntimeError> {
-        if let Some(field) = self.fields.get(property_name) {
+        let inst = self.borrow();
+        if let Some(field) = inst.fields.get(property_name) {
             Ok(field.clone())
-        } else if let Some(method) = self.class.methods.get(property_name) {
-            let function = Value::Function(Rc::new(method.clone()));
-            Ok(function)
+        } else if let Some(method) = inst.class.methods.get(property_name) {
+            let mut this_scope = Scope::new(Some(method.parent_scope.clone()));
+            let this = Value::Instance(self.clone());
+            this_scope.define(String::from("this"), this);
+            let mut function = method.clone();
+            function.parent_scope = Rc::new(RefCell::new(this_scope));
+            Ok(Value::Function(Rc::new(function)))
         } else {
             Err(RuntimeError::new(
                 Token::empty(),
@@ -664,7 +688,8 @@ impl Instance {
     }
 
     fn set(&mut self, property_name: String, value: Value) {
-        self.fields.insert(property_name, value);
+        let mut inst = self.borrow_mut();
+        inst.fields.insert(property_name, value);
     }
 }
 

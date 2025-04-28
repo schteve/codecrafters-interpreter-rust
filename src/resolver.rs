@@ -96,12 +96,21 @@ impl Resolver {
                 self.declare(name.clone())?;
                 self.define(name.clone());
 
+                self.scope_begin();
+                self.scopes
+                    .last_mut()
+                    .expect("There must be a scope because we just made one")
+                    .idents
+                    .insert(String::from("this"), true);
+
                 for method in methods {
                     let Stmt::FunDecl(_name, params, body) = method else {
                         panic!("Found non-function declaration in method list");
                     };
                     self.resolve_fn(params, body, FnType::Method)?;
                 }
+
+                self.scope_end();
             }
             Stmt::VarDecl(name, initializer) => {
                 self.declare(name.clone())?;
@@ -202,6 +211,9 @@ impl Resolver {
             ExprKind::Set(obj, _property_name, value) => {
                 self.resolve_expr(obj.as_mut())?;
                 self.resolve_expr(value.as_mut())?;
+            }
+            ExprKind::This(binding) => {
+                binding.depth = self.resolve_local(&binding.name);
             }
         }
         Ok(())
