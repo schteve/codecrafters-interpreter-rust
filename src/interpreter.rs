@@ -524,6 +524,7 @@ impl Interpreter {
                             params: params.clone(),
                             body: body.clone(),
                             parent_scope: self.env.curr_scope.clone(),
+                            is_initializer: name == "init",
                         };
                         method_map.insert(name.clone(), f);
                     }
@@ -549,6 +550,7 @@ impl Interpreter {
                         params: params.clone(),
                         body: body.clone(),
                         parent_scope: self.env.curr_scope.clone(),
+                        is_initializer: false,
                     }));
                     self.env.define(name.clone(), Some(value));
                 }
@@ -583,6 +585,19 @@ pub struct Function {
     params: Vec<String>,
     body: Vec<Stmt>,
     parent_scope: Rc<RefCell<Scope>>,
+    is_initializer: bool,
+}
+
+impl Function {
+    fn bind(&self, instance: &Rc<RefCell<Instance>>) -> Self {
+        let mut this_scope = Scope::new(Some(self.parent_scope.clone()));
+        let this = Value::Instance(instance.clone());
+        this_scope.define(String::from("this"), this);
+
+        let mut function = self.clone();
+        function.parent_scope = Rc::new(RefCell::new(this_scope));
+        function
+    }
 }
 
 impl Callable for Function {
@@ -607,7 +622,13 @@ impl Callable for Function {
 
         interpreter.env.curr_scope = curr_scope;
 
-        result.map(|_| Value::Nil)
+        if self.is_initializer {
+            let s = self.parent_scope.borrow();
+            let this = s.vars.get("this").expect("'this' must exist'").clone();
+            Ok(this)
+        } else {
+            result.map(|_| Value::Nil)
+        }
     }
 }
 
@@ -629,12 +650,30 @@ impl Callable for Class {
     }
 
     fn arity(&self) -> u8 {
-        0
+        let initializer = self
+            .methods
+            .iter()
+            .find_map(|(name, method)| (name == "init").then_some(method));
+        if let Some(init) = initializer {
+            init.arity()
+        } else {
+            0
+        }
     }
 
-    fn call(&self, _interpreter: &mut Interpreter, _args: &[Value]) -> Result<Value, RuntimeError> {
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, RuntimeError> {
         let inst = Instance::new(self.clone());
-        Ok(Value::Instance(Rc::new(RefCell::new(inst))))
+        let inst = Rc::new(RefCell::new(inst));
+
+        let initializer = self
+            .methods
+            .iter()
+            .find_map(|(name, method)| (name == "init").then_some(method));
+        if let Some(init) = initializer {
+            init.bind(&inst).call(interpreter, args)?;
+        }
+
+        Ok(Value::Instance(inst))
     }
 }
 
@@ -673,11 +712,7 @@ impl HasProperty for Rc<RefCell<Instance>> {
         if let Some(field) = inst.fields.get(property_name) {
             Ok(field.clone())
         } else if let Some(method) = inst.class.methods.get(property_name) {
-            let mut this_scope = Scope::new(Some(method.parent_scope.clone()));
-            let this = Value::Instance(self.clone());
-            this_scope.define(String::from("this"), this);
-            let mut function = method.clone();
-            function.parent_scope = Rc::new(RefCell::new(this_scope));
+            let function = method.bind(self);
             Ok(Value::Function(Rc::new(function)))
         } else {
             Err(RuntimeError::new(
