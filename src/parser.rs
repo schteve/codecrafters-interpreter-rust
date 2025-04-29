@@ -91,6 +91,25 @@ impl Parser {
             .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
             .lexeme;
 
+        let superclass = if let Some(Token {
+            ttype: TokenType::Less,
+            ..
+        }) = self.peek()
+        {
+            self.advance();
+
+            let super_ident =
+                self.expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?;
+            let binding = Binding {
+                name: super_ident.lexeme.clone(),
+                depth: None,
+            };
+            let kind = ExprKind::Variable(binding);
+            Some(Expr::new(super_ident, kind))
+        } else {
+            None
+        };
+
         self.expect(TokenType::LeftBrace, ParseErrorKind::ExpectLeftBrace)?;
 
         let mut methods = Vec::new();
@@ -109,7 +128,7 @@ impl Parser {
 
         self.expect(TokenType::RightBrace, ParseErrorKind::ExpectRightBrace)?;
 
-        Ok(Stmt::ClassDecl(ident, methods))
+        Ok(Stmt::ClassDecl(ident, methods, superclass))
     }
 
     fn parse_var_decl(&mut self) -> Result<Stmt, ParseError> {

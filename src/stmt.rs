@@ -7,7 +7,7 @@ pub enum Stmt {
     Print(Expr),
     While(Expr, Box<Stmt>),
     Block(Vec<Stmt>),
-    ClassDecl(String, Vec<Stmt>),
+    ClassDecl(String, Vec<Stmt>, Option<Expr>),
     VarDecl(String, Option<Expr>),
     FunDecl(String, Vec<String>, Vec<Stmt>),
     Return(Token, Option<Expr>),

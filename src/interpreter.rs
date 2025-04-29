@@ -37,6 +37,8 @@ pub enum RuntimeErrorKind {
     NotAnInstance,
     #[error("Undefined property {0}.")]
     UndefinedProperty(String),
+    #[error("Superclass must be a class.")]
+    SuperNotClass,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -512,7 +514,20 @@ impl Interpreter {
                         self.interpret(body_slice)?;
                     }
                 }
-                Stmt::ClassDecl(name, methods) => {
+                Stmt::ClassDecl(name, methods, superclass) => {
+                    let rc_superclass = if let Some(sup) = superclass {
+                        if let Value::Class(rc_class) = self.eval(sup)? {
+                            Some(rc_class)
+                        } else {
+                            return Err(RuntimeError::new(
+                                sup.token.clone(),
+                                RuntimeErrorKind::SuperNotClass,
+                            ));
+                        }
+                    } else {
+                        None
+                    };
+
                     let mut method_map = HashMap::new();
                     for method in methods {
                         let Stmt::FunDecl(name, params, body) = method else {
@@ -532,8 +547,9 @@ impl Interpreter {
                     let class = Class {
                         name: name.clone(),
                         methods: method_map,
+                        _superclass: rc_superclass,
                     };
-                    let value: Value = Value::Class(Rc::new(class));
+                    let value = Value::Class(Rc::new(class));
                     self.env.define(name.clone(), Some(value));
                 }
                 Stmt::VarDecl(name, initializer) => {
@@ -655,6 +671,7 @@ impl Display for Function {
 pub struct Class {
     name: String,
     methods: HashMap<String, Function>,
+    _superclass: Option<Rc<Class>>,
 }
 
 impl Callable for Class {

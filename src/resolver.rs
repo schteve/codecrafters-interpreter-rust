@@ -20,6 +20,8 @@ pub enum ResolverErrorKind {
     ThisOutsideClass,
     #[error("Can't return a value from an initializer.")]
     ReturnValueInitializer,
+    #[error("A class can't inherit from itself.")]
+    ClassInheritSelf,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -105,12 +107,31 @@ impl Resolver {
                 self.resolve_expr(cond)?;
                 self.resolve_stmt(body.as_mut())?;
             }
-            Stmt::ClassDecl(name, methods) => {
+            Stmt::ClassDecl(name, methods, superclass) => {
                 let mut enclosing_class = ClassType::Class;
                 mem::swap(&mut self.curr_class, &mut enclosing_class);
 
                 self.declare(name.clone())?;
                 self.define(name.clone());
+
+                if let Some(sup_expr) = superclass {
+                    if let Expr {
+                        kind: ExprKind::Variable(binding),
+                        ..
+                    } = sup_expr
+                    {
+                        if *name == binding.name {
+                            return Err(ResolverError::new(
+                                sup_expr.token.clone(),
+                                ResolverErrorKind::ClassInheritSelf,
+                            ));
+                        }
+                    }
+                }
+
+                if let Some(sup) = superclass {
+                    self.resolve_expr(sup)?;
+                }
 
                 self.scope_begin();
                 self.scopes
