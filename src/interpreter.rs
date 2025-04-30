@@ -547,7 +547,7 @@ impl Interpreter {
                     let class = Class {
                         name: name.clone(),
                         methods: method_map,
-                        _superclass: rc_superclass,
+                        superclass: rc_superclass,
                     };
                     let value = Value::Class(Rc::new(class));
                     self.env.define(name.clone(), Some(value));
@@ -671,7 +671,19 @@ impl Display for Function {
 pub struct Class {
     name: String,
     methods: HashMap<String, Function>,
-    _superclass: Option<Rc<Class>>,
+    superclass: Option<Rc<Class>>,
+}
+
+impl Class {
+    fn find_method(&self, name: &str) -> Option<&Function> {
+        self.methods.get(name).or_else(|| {
+            if let Some(sup) = &self.superclass {
+                sup.find_method(name)
+            } else {
+                None
+            }
+        })
+    }
 }
 
 impl Callable for Class {
@@ -680,11 +692,7 @@ impl Callable for Class {
     }
 
     fn arity(&self) -> u8 {
-        let initializer = self
-            .methods
-            .iter()
-            .find_map(|(name, method)| (name == "init").then_some(method));
-        if let Some(init) = initializer {
+        if let Some(init) = self.find_method("init") {
             init.arity()
         } else {
             0
@@ -695,11 +703,7 @@ impl Callable for Class {
         let inst = Instance::new(self.clone());
         let inst = Rc::new(RefCell::new(inst));
 
-        let initializer = self
-            .methods
-            .iter()
-            .find_map(|(name, method)| (name == "init").then_some(method));
-        if let Some(init) = initializer {
+        if let Some(init) = self.find_method("init") {
             init.bind(&inst).call(interpreter, args)?;
         }
 
@@ -741,7 +745,7 @@ impl HasProperty for Rc<RefCell<Instance>> {
         let inst = self.borrow();
         if let Some(field) = inst.fields.get(property_name) {
             Ok(field.clone())
-        } else if let Some(method) = inst.class.methods.get(property_name) {
+        } else if let Some(method) = inst.class.find_method(property_name) {
             let function = method.bind(self);
             Ok(Value::Function(Rc::new(function)))
         } else {
