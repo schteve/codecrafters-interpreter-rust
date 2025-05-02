@@ -1,15 +1,6 @@
-class Doughnut {
+class Foo {
   cook() {
-    print "Fry until golden brown.";
+    // Foo is not a subclass
+    super.cook(); // expect compile error
   }
 }
-
-// Super can be used to call the overridden method
-// of the parent class
-class BostonCream < Doughnut {
-  cook() {
-    super.cook();
-  }
-}
-
-BostonCream().cook();

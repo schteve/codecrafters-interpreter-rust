@@ -22,6 +22,10 @@ pub enum ResolverErrorKind {
     ReturnValueInitializer,
     #[error("A class can't inherit from itself.")]
     ClassInheritSelf,
+    #[error("Can't use 'super' outside of a class.")]
+    SuperOutsideClass,
+    #[error("Can't use 'super' in a class with no superclass.")]
+    SuperNoSuperclass,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -64,6 +68,7 @@ enum FnType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 pub struct Resolver {
@@ -130,6 +135,7 @@ impl Resolver {
                 }
 
                 if let Some(sup) = superclass {
+                    self.curr_class = ClassType::Subclass;
                     self.resolve_expr(sup)?;
 
                     self.scope_begin();
@@ -284,9 +290,23 @@ impl Resolver {
 
                 binding.depth = self.resolve_local(&binding.name);
             }
-            ExprKind::Super(binding, _method) => {
-                binding.depth = self.resolve_local(&binding.name);
-            }
+            ExprKind::Super(binding, _method) => match self.curr_class {
+                ClassType::None => {
+                    return Err(ResolverError::new(
+                        expr.token.clone(),
+                        ResolverErrorKind::SuperOutsideClass,
+                    ));
+                }
+                ClassType::Class => {
+                    return Err(ResolverError::new(
+                        expr.token.clone(),
+                        ResolverErrorKind::SuperNoSuperclass,
+                    ));
+                }
+                ClassType::Subclass => {
+                    binding.depth = self.resolve_local(&binding.name);
+                }
+            },
         }
         Ok(())
     }
