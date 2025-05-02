@@ -131,6 +131,13 @@ impl Resolver {
 
                 if let Some(sup) = superclass {
                     self.resolve_expr(sup)?;
+
+                    self.scope_begin();
+                    self.scopes
+                        .last_mut()
+                        .expect("There must be a scope because we just made one")
+                        .idents
+                        .insert(String::from("super"), true);
                 }
 
                 self.scope_begin();
@@ -152,9 +159,13 @@ impl Resolver {
                     self.resolve_fn(params, body, fn_type)?;
                 }
 
-                self.curr_class = enclosing_class;
-
                 self.scope_end();
+
+                if superclass.is_some() {
+                    self.scope_end();
+                }
+
+                self.curr_class = enclosing_class;
             }
             Stmt::VarDecl(name, initializer) => {
                 self.declare(name.clone())?;
@@ -271,6 +282,9 @@ impl Resolver {
                     ));
                 }
 
+                binding.depth = self.resolve_local(&binding.name);
+            }
+            ExprKind::Super(binding, _method) => {
                 binding.depth = self.resolve_local(&binding.name);
             }
         }

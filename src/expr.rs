@@ -48,6 +48,7 @@ pub enum ExprKind {
     Get(Box<Expr>, String),
     Set(Box<Expr>, String, Box<Expr>),
     This(Binding),
+    Super(Binding, String),
 }
 
 #[derive(Clone, Debug)]
@@ -202,6 +203,9 @@ impl Expr {
             }
             ExprKind::This(binding) => {
                 print!("(this {})", binding.name);
+            }
+            ExprKind::Super(_binding, method) => {
+                print!("(super {})", method);
             }
         }
     }

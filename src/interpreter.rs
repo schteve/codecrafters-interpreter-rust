@@ -483,6 +483,44 @@ impl Interpreter {
                     RuntimeErrorKind::UndefinedVariable(binding.name.clone()),
                 )
             }),
+            ExprKind::Super(binding, method) => {
+                // Find super from same location as method's binding
+                let Value::Class(superclass) = self.env.get(binding).ok_or_else(|| {
+                    RuntimeError::new(
+                        expr.token.clone(),
+                        RuntimeErrorKind::UndefinedVariable(binding.name.clone()),
+                    )
+                })?
+                else {
+                    panic!("Found non-class value in superclass");
+                };
+
+                // Find this from one level higher than super
+                let this_binding = Binding {
+                    name: String::from("this"),
+                    depth: binding.depth.map(|d| d - 1),
+                };
+                let Value::Instance(this) = self.env.get(&this_binding).ok_or_else(|| {
+                    RuntimeError::new(
+                        expr.token.clone(),
+                        RuntimeErrorKind::UndefinedVariable(binding.name.clone()),
+                    )
+                })?
+                else {
+                    panic!("Found non-instance object in this");
+                };
+
+                // Find method from superclass
+                let method = superclass.find_method(method).ok_or_else(|| {
+                    RuntimeError::new(
+                        Token::empty(),
+                        RuntimeErrorKind::UndefinedProperty(binding.name.clone()),
+                    )
+                })?;
+
+                let function = method.bind(&this);
+                Ok(Value::Function(Rc::new(function)))
+            }
         }
     }
 
@@ -528,6 +566,15 @@ impl Interpreter {
                         None
                     };
 
+                    if let Some(sup) = superclass {
+                        let super_value = self.eval(sup)?;
+
+                        let curr_scope = self.env.curr_scope.clone();
+                        let new_scope = Scope::new(Some(curr_scope));
+                        self.env.curr_scope = Rc::new(RefCell::new(new_scope));
+                        self.env.define(String::from("super"), Some(super_value));
+                    }
+
                     let mut method_map = HashMap::new();
                     for method in methods {
                         let Stmt::FunDecl(name, params, body) = method else {
@@ -542,6 +589,17 @@ impl Interpreter {
                             is_initializer: name == "init",
                         };
                         method_map.insert(name.clone(), f);
+                    }
+
+                    if superclass.is_some() {
+                        let parent = self
+                            .env
+                            .curr_scope
+                            .borrow()
+                            .parent
+                            .clone()
+                            .expect("Environment must be deep enough");
+                        self.env.curr_scope = parent;
                     }
 
                     let class = Class {

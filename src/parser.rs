@@ -35,6 +35,8 @@ pub enum ParseErrorKind {
     ExpectVar,
     #[error("Can't have more than 255 parameters.")]
     TooManyParams,
+    #[error("Expect '.' after 'super'.")]
+    ExpectDot,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -665,6 +667,21 @@ impl Parser {
                         depth: None,
                     };
                     let kind = ExprKind::This(binding);
+                    Ok(Expr::new(t, kind))
+                }
+                TokenType::Super => {
+                    self.advance();
+
+                    self.expect(TokenType::Dot, ParseErrorKind::ExpectDot)?;
+                    let method = self
+                        .expect(TokenType::Identifier, ParseErrorKind::ExpectIdentifier)?
+                        .lexeme;
+
+                    let binding = Binding {
+                        name: String::from("super"),
+                        depth: None,
+                    };
+                    let kind = ExprKind::Super(binding, method);
                     Ok(Expr::new(t, kind))
                 }
                 _ => Err(self.error(ParseErrorKind::NoValidExpr)),
